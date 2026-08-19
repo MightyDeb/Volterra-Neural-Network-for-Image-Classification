@@ -13,6 +13,7 @@ import os
 import time
 from typing import Dict, Any
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -29,14 +30,12 @@ def estimate_flops(model: nn.Module, input_size: tuple = (1, 3, 32, 32)) -> int:
     def hook_fn(module, inp, out):
         nonlocal total_macs
         if isinstance(module, nn.Conv2d):
-            # MACs = out_c * out_h * out_w * (in_c * k_h * k_w)
             out_c, out_h, out_w = out.shape[1], out.shape[2], out.shape[3]
             in_c = inp[0].shape[1]
             kh, kw = module.kernel_size
             macs = out_c * out_h * out_w * (in_c * kh * kw)
             total_macs += macs
         elif isinstance(module, nn.Linear):
-            # MACs = in_features * out_features
             macs = module.in_features * module.out_features
             total_macs += macs
 
@@ -97,7 +96,7 @@ def benchmark_model_efficiency(name: str, num_classes: int = 7,
                                in_channels: int = 3, img_size: int = 32,
                                device: torch.device = None) -> Dict[str, Any]:
     """
-    Computes all computational efficiency metrics for a given architecture.
+    Computes all computational efficiency metrics for a given architecture on DermaMNIST.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -127,10 +126,8 @@ def benchmark_model_efficiency(name: str, num_classes: int = 7,
 
 def run_efficiency_suite(num_classes: int = 7, in_channels: int = 3, img_size: int = 32) -> None:
     """
-    Runs efficiency benchmarking across CNN, VNN, and ViT architectures.
+    Runs efficiency benchmarking across CNN, VNN, and ViT architectures on DermaMNIST.
     """
-    import numpy as np
-    global np
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("\n" + "=" * 80)
     print(f"COMPUTATIONAL EFFICIENCY & HARDWARE COMPLEXITY PROFILING ({device})")
@@ -154,8 +151,7 @@ def run_efficiency_suite(num_classes: int = 7, in_channels: int = 3, img_size: i
 
 
 if __name__ == "__main__":
-    import numpy as np
-    parser = argparse.ArgumentParser(description="Profile Model Efficiency")
+    parser = argparse.ArgumentParser(description="Profile Model Efficiency on DermaMNIST")
     parser.add_argument("--num_classes", type=int, default=7)
     parser.add_argument("--img_size", type=int, default=32)
     args = parser.parse_args()
