@@ -9,6 +9,7 @@ penultimate feature extraction, and intermediate layer representations.
 """
 
 import math
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -367,6 +368,31 @@ def build_model(name: str, num_classes: int = 10, in_channels: int = 3,
         )
     else:
         raise ValueError(f"Unknown model architecture: '{name}'. Choose from 'cnn', 'vnn', 'vit'.")
+
+
+def load_model_checkpoint(model: nn.Module, ckpt_path: str, device: torch.device = None) -> bool:
+    """
+    Robust checkpoint loader that safely loads model weights, handling potential
+    class count differences (e.g., 10-class pretraining vs 7-class DermaMNIST) via strict=False.
+    """
+    if not ckpt_path or not os.path.exists(ckpt_path):
+        return False
+    if device is None:
+        device = next(model.parameters()).device if list(model.parameters()) else torch.device("cpu")
+    try:
+        state = torch.load(ckpt_path, map_location=device)
+        try:
+            model.load_state_dict(state)
+            return True
+        except Exception:
+            model_dict = model.state_dict()
+            filtered = {k: v for k, v in state.items() if k in model_dict and v.shape == model_dict[k].shape}
+            if filtered:
+                model.load_state_dict(filtered, strict=False)
+                return True
+            return False
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":

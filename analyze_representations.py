@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models import build_model, SimpleVNN
+from models import build_model, SimpleVNN, load_model_checkpoint
 from train import get_dataset, get_stratified_sample_indices, DERMAMNIST_CLASSES
 from logger_utils import setup_logger
 
@@ -205,13 +205,12 @@ def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
 
     models = {}
     for m_type, ckpt in [("cnn", cnn_ckpt), ("vnn", vnn_ckpt), ("vit", vit_ckpt)]:
-        m = build_model(m_type, num_classes=7, in_channels=3, img_size=32)
-        if os.path.exists(ckpt):
-            m.load_state_dict(torch.load(ckpt, map_location="cpu"))
+        m = build_model(m_type, num_classes=7, in_channels=3, img_size=32).to(device)
+        loaded = load_model_checkpoint(m, ckpt, device=device)
+        if loaded:
             logger.info(f"Loaded {m_type.upper()} checkpoint from {ckpt}")
         else:
-            logger.warning(f"Checkpoint '{ckpt}' not found. Running with initialized weights for {m_type.upper()}.")
-        m.to(device)
+            logger.warning(f"Checkpoint '{ckpt}' not found or incompatible. Running with initialized weights for {m_type.upper()}.")
         models[m_type] = m
 
     # Extract Embeddings

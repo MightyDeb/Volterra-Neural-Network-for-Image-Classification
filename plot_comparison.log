@@ -1,0 +1,10 @@
+[2026-08-19 22:23:10] [INFO] ================================================================================
+[2026-08-19 22:23:10] [INFO] STARTING QUALITATIVE XAI SALIENCY PLOT GENERATION
+[2026-08-19 22:23:10] [INFO] Checkpoints: CNN='cnn.pt', ViT='vit.pt', VNN='vnn.pt'
+[2026-08-19 22:23:10] [INFO] Target Output Directory: 'interpretability_plots', Total Plots Requested: 15
+[2026-08-19 22:23:10] [INFO] High-Confidence Filter: >=85% (Correct Class Predictions Only: True)
+[2026-08-19 22:23:10] [INFO] ================================================================================
+[2026-08-19 22:24:05] [INFO] Loaded CNN weights from cnn.pt
+[2026-08-19 22:24:05] [INFO] Loaded ViT weights from vit.pt
+[2026-08-19 22:24:05] [INFO] Loaded VNN weights from vnn.pt
+[2026-08-19 22:24:05] [INFO] Filtering test set for high-confidence samples (>=85%)...
