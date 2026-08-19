@@ -103,7 +103,7 @@ def extract_dataset_embeddings(model: nn.Module, dataset, num_samples: int = 300
 
             feat = model.extract_features(img)
             features.append(feat.cpu().numpy()[0])
-            labels.append(int(label) if not isinstance(label, torch.Tensor) else int(label.item()))
+            labels.append(int(np.asarray(label).squeeze()))
 
     return np.array(features), np.array(labels)
 

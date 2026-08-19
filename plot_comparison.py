@@ -41,16 +41,22 @@ def generate_comparison_plot(cnn_ckpt: str = "cnn.pt", vit_ckpt: str = "vit.pt",
         print(f"[Warning] Index {image_index} exceeds dataset size ({len(test_set)}). Using index 0.")
         image_index = 0
 
-    img_tensor, true_label = test_set[image_index]
-    if isinstance(img_tensor, np.ndarray):
-        img_tensor = torch.tensor(img_tensor)
+    item = test_set[image_index]
+    img_raw, label_raw = item[0], item[1]
+
+    if isinstance(img_raw, np.ndarray):
+        img_tensor = torch.tensor(img_raw)
+    elif isinstance(img_raw, torch.Tensor):
+        img_tensor = img_raw.clone()
+    else:
+        img_tensor = torch.tensor(img_raw)
+
     if img_tensor.ndim == 3:
         img_tensor = img_tensor.unsqueeze(0)
     img_tensor = img_tensor.to(device)
 
-    if isinstance(true_label, torch.Tensor):
-        true_label = int(true_label.item())
-
+    # Safely convert true label to integer scalar
+    true_label = int(np.asarray(label_raw).squeeze())
     true_class_name = DERMAMNIST_CLASSES[true_label] if 0 <= true_label < len(DERMAMNIST_CLASSES) else str(true_label)
 
     # Build models
@@ -75,9 +81,12 @@ def generate_comparison_plot(cnn_ckpt: str = "cnn.pt", vit_ckpt: str = "vit.pt",
         out_vit = torch.softmax(vit(img_tensor), dim=1)[0]
         out_vnn = torch.softmax(vnn(img_tensor), dim=1)[0]
 
-    pred_cnn, conf_cnn = out_cnn.argmax().item(), out_cnn.max().item()
-    pred_vit, conf_vit = out_vit.argmax().item(), out_vit.max().item()
-    pred_vnn, conf_vnn = out_vnn.argmax().item(), out_vnn.max().item()
+    pred_cnn = int(out_cnn.argmax().item())
+    conf_cnn = float(out_cnn.max().item())
+    pred_vit = int(out_vit.argmax().item())
+    conf_vit = float(out_vit.max().item())
+    pred_vnn = int(out_vnn.argmax().item())
+    conf_vnn = float(out_vnn.max().item())
 
     name_cnn = DERMAMNIST_CLASSES[pred_cnn] if 0 <= pred_cnn < len(DERMAMNIST_CLASSES) else str(pred_cnn)
     name_vit = DERMAMNIST_CLASSES[pred_vit] if 0 <= pred_vit < len(DERMAMNIST_CLASSES) else str(pred_vit)
