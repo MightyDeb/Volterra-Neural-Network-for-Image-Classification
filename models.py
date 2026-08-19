@@ -10,6 +10,7 @@ penultimate feature extraction, and intermediate layer representations.
 
 import math
 import os
+from typing import Tuple, Dict, List, Optional, Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
