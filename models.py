@@ -121,6 +121,24 @@ class SimpleVNN(nn.Module):
         feat = self.extract_features(x)
         return self.classifier(feat)
 
+    def get_last_feature_map(self, x: torch.Tensor) -> torch.Tensor:
+        """Returns the spatial feature map tensor [B, C, H, W] from layer3 before pooling."""
+        out1 = self.layer1(x)
+        p1 = self.pool1(out1)
+        out2 = self.layer2(p1)
+        p2 = self.pool2(out2)
+        out3 = self.layer3(p2)
+        return out3
+
+    def forward_with_features(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns (logits, feature_maps) where feature_maps has shape [B, C, H, W].
+        """
+        feat_map = self.get_last_feature_map(x)
+        pooled = self.pool3(feat_map).flatten(1)
+        logits = self.classifier(pooled)
+        return logits, feat_map
+
     def get_intermediate_activations(self, x: torch.Tensor):
         """Returns activations at early (layer1), mid (layer2), and deep (layer3) stages."""
         out1 = self.layer1(x)

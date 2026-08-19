@@ -1,0 +1,38 @@
+[2026-08-19 18:24:21] [INFO] ================================================================================
+[2026-08-19 18:24:21] [INFO] STARTING QUALITATIVE XAI SALIENCY PLOT GENERATION
+[2026-08-19 18:24:21] [INFO] Checkpoints: CNN='cnn.pt', ViT='vit.pt', VNN='vnn.pt'
+[2026-08-19 18:24:21] [INFO] Target Output Directory: 'interpretability_plots', Total Plots Requested: 15
+[2026-08-19 18:24:21] [INFO] High-Confidence Filter: >=85% (Correct Class Predictions Only: True)
+[2026-08-19 18:24:21] [INFO] ================================================================================
+[2026-08-19 18:24:23] [INFO] Loaded CNN weights from cnn.pt
+[2026-08-19 18:24:23] [INFO] Loaded ViT weights from vit.pt
+[2026-08-19 18:24:23] [INFO] Loaded VNN weights from vnn.pt
+[2026-08-19 18:24:23] [INFO] Filtering test set for high-confidence samples (>=85%)...
+[2026-08-19 18:24:31] [INFO] Class 'AKIEC': Selected 2 samples reaching >=85% confidence (192.7%, 185.4%)
+[2026-08-19 18:24:31] [INFO] Class 'BCC': Selected 2 samples reaching >=85% confidence (196.6%, 194.2%)
+[2026-08-19 18:24:31] [INFO] Class 'BKL': Selected 2 samples reaching >=85% confidence (194.6%, 189.5%)
+[2026-08-19 18:24:31] [INFO] Class 'DF': Selected 2 samples reaching >=85% confidence (199.9%, 199.5%)
+[2026-08-19 18:24:31] [INFO] Class 'MEL': Selected 2 samples reaching >=85% confidence (199.6%, 198.9%)
+[2026-08-19 18:24:31] [INFO] Class 'NV': Selected 3 samples reaching >=85% confidence (200.0%, 200.0%, 200.0%)
+[2026-08-19 18:24:31] [INFO] Class 'VASC': Selected 2 samples reaching >=85% confidence (200.0%, 200.0%)
+[2026-08-19 18:24:31] [INFO] Final selected 15 test sample indices: [1375, 269, 214, 1132, 139, 1105, 1462, 600, 1850, 674, 348, 239, 496, 470, 1784]
+[2026-08-19 18:24:33] [INFO] Plot 01/15 [Sample #1375 | Class: AKIEC]: CNN=akiec (85.0%), ViT=akiec (93.8%), VNN=akiec (92.7%) -> Saved: interpretability_plots/interpretability_plot_01_sample_1375_class_akiec.png
+[2026-08-19 18:24:34] [INFO] Plot 02/15 [Sample #0269 | Class: AKIEC]: CNN=akiec (77.3%), ViT=akiec (78.1%), VNN=akiec (85.4%) -> Saved: interpretability_plots/interpretability_plot_02_sample_269_class_akiec.png
+[2026-08-19 18:24:34] [INFO] Plot 03/15 [Sample #0214 | Class: BCC]: CNN=bcc (86.3%), ViT=bcc (78.7%), VNN=bcc (96.6%) -> Saved: interpretability_plots/interpretability_plot_03_sample_214_class_bcc.png
+[2026-08-19 18:24:35] [INFO] Plot 04/15 [Sample #1132 | Class: BCC]: CNN=bcc (91.6%), ViT=bcc (94.8%), VNN=bcc (94.2%) -> Saved: interpretability_plots/interpretability_plot_04_sample_1132_class_bcc.png
+[2026-08-19 18:24:36] [INFO] Plot 05/15 [Sample #0139 | Class: BKL]: CNN=bkl (76.6%), ViT=bkl (81.8%), VNN=bkl (94.6%) -> Saved: interpretability_plots/interpretability_plot_05_sample_139_class_bkl.png
+[2026-08-19 18:24:37] [INFO] Plot 06/15 [Sample #1105 | Class: BKL]: CNN=bkl (75.9%), ViT=mel (70.8%), VNN=bkl (89.5%) -> Saved: interpretability_plots/interpretability_plot_06_sample_1105_class_bkl.png
+[2026-08-19 18:24:38] [INFO] Plot 07/15 [Sample #1462 | Class: DF]: CNN=df (98.7%), ViT=df (99.7%), VNN=df (99.9%) -> Saved: interpretability_plots/interpretability_plot_07_sample_1462_class_df.png
+[2026-08-19 18:24:39] [INFO] Plot 08/15 [Sample #0600 | Class: DF]: CNN=df (75.1%), ViT=bkl (83.6%), VNN=df (99.5%) -> Saved: interpretability_plots/interpretability_plot_08_sample_600_class_df.png
+[2026-08-19 18:24:40] [INFO] Plot 09/15 [Sample #1850 | Class: MEL]: CNN=mel (98.5%), ViT=vasc (98.8%), VNN=mel (99.6%) -> Saved: interpretability_plots/interpretability_plot_09_sample_1850_class_mel.png
+[2026-08-19 18:24:41] [INFO] Plot 10/15 [Sample #0674 | Class: MEL]: CNN=vasc (100.0%), ViT=vasc (98.5%), VNN=mel (98.9%) -> Saved: interpretability_plots/interpretability_plot_10_sample_674_class_mel.png
+[2026-08-19 18:24:42] [INFO] Plot 11/15 [Sample #0348 | Class: NV]: CNN=nv (99.9%), ViT=nv (99.6%), VNN=nv (100.0%) -> Saved: interpretability_plots/interpretability_plot_11_sample_348_class_nv.png
+[2026-08-19 18:24:44] [INFO] Plot 12/15 [Sample #0239 | Class: NV]: CNN=nv (99.7%), ViT=nv (99.5%), VNN=nv (100.0%) -> Saved: interpretability_plots/interpretability_plot_12_sample_239_class_nv.png
+[2026-08-19 18:24:45] [INFO] Plot 13/15 [Sample #0496 | Class: NV]: CNN=nv (99.7%), ViT=nv (99.6%), VNN=nv (100.0%) -> Saved: interpretability_plots/interpretability_plot_13_sample_496_class_nv.png
+[2026-08-19 18:24:46] [INFO] Plot 14/15 [Sample #0470 | Class: VASC]: CNN=vasc (99.9%), ViT=vasc (99.9%), VNN=vasc (100.0%) -> Saved: interpretability_plots/interpretability_plot_14_sample_470_class_vasc.png
+[2026-08-19 18:24:46] [INFO] Plot 15/15 [Sample #1784 | Class: VASC]: CNN=vasc (100.0%), ViT=vasc (99.9%), VNN=vasc (100.0%) -> Saved: interpretability_plots/interpretability_plot_15_sample_1784_class_vasc.png
+[2026-08-19 18:24:47] [INFO] Saved default overview comparison figure to: interpretability_comparison.png
+[2026-08-19 18:24:47] [INFO] ================================================================================
+[2026-08-19 18:24:47] [INFO] Successfully generated all 15 qualitative interpretability plots.
+[2026-08-19 18:24:47] [INFO] ================================================================================
+

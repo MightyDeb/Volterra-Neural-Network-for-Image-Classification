@@ -1,0 +1,37 @@
+[2026-08-19 18:29:55] [INFO] =====================================================================================
+[2026-08-19 18:29:55] [INFO] QUANTITATIVE EXPLAINABLE AI (XAI) EVALUATION BENCHMARK (DERMAMNIST - 7 CLASSES)
+[2026-08-19 18:29:55] [INFO] Checkpoints: CNN='cnn.pt', VNN='vnn.pt', ViT='vit.pt'
+[2026-08-19 18:29:55] [INFO] Target Stratified Samples: 100 (Seed: 42) | Log: 'xai_evaluation.log'
+[2026-08-19 18:29:55] [INFO] =====================================================================================
+[2026-08-19 18:29:56] [INFO] Selected 100 Stratified Test Images (Class distribution: akiec: 14, bcc: 14, bkl: 14, df: 14, mel: 15, nv: 15, vasc: 14)
+[2026-08-19 18:29:56] [INFO] The exact same test image indices will be evaluated across CNN, VNN, and ViT.
+
+[2026-08-19 18:29:56] [INFO] Loaded CNN checkpoint from cnn.pt
+[2026-08-19 18:29:56] [INFO] Evaluating XAI Quantitative Metrics for [CNN] on 100 Stratified Test Samples...
+[2026-08-19 18:29:58] [INFO]   [CNN] Processed 025/100 | Running Del AUC: 0.2698 | Ins AUC: 0.6107 | SSIM: 0.7814
+[2026-08-19 18:29:59] [INFO]   [CNN] Processed 050/100 | Running Del AUC: 0.2956 | Ins AUC: 0.6305 | SSIM: 0.8293
+[2026-08-19 18:30:00] [INFO]   [CNN] Processed 075/100 | Running Del AUC: 0.3100 | Ins AUC: 0.6201 | SSIM: 0.8420
+[2026-08-19 18:30:01] [INFO]   [CNN] Processed 100/100 | Running Del AUC: 0.3119 | Ins AUC: 0.6144 | SSIM: 0.8557
+[2026-08-19 18:30:01] [INFO] Loaded VNN checkpoint from vnn.pt
+[2026-08-19 18:30:01] [INFO] Evaluating XAI Quantitative Metrics for [VNN] on 100 Stratified Test Samples...
+[2026-08-19 18:30:02] [INFO]   [VNN] Processed 025/100 | Running Del AUC: 0.3254 | Ins AUC: 0.5888 | SSIM: 0.9924
+[2026-08-19 18:30:03] [INFO]   [VNN] Processed 050/100 | Running Del AUC: 0.3411 | Ins AUC: 0.6103 | SSIM: 0.9941
+[2026-08-19 18:30:03] [INFO]   [VNN] Processed 075/100 | Running Del AUC: 0.3178 | Ins AUC: 0.5733 | SSIM: 0.9945
+[2026-08-19 18:30:04] [INFO]   [VNN] Processed 100/100 | Running Del AUC: 0.3250 | Ins AUC: 0.5725 | SSIM: 0.9947
+[2026-08-19 18:30:04] [INFO] Loaded VIT checkpoint from vit.pt
+[2026-08-19 18:30:04] [INFO] Evaluating XAI Quantitative Metrics for [VIT] on 100 Stratified Test Samples...
+[2026-08-19 18:30:06] [INFO]   [VIT] Processed 025/100 | Running Del AUC: 0.1983 | Ins AUC: 0.8040 | SSIM: 0.9931
+[2026-08-19 18:30:08] [INFO]   [VIT] Processed 050/100 | Running Del AUC: 0.1987 | Ins AUC: 0.8078 | SSIM: 0.9929
+[2026-08-19 18:30:10] [INFO]   [VIT] Processed 075/100 | Running Del AUC: 0.2132 | Ins AUC: 0.7405 | SSIM: 0.9930
+[2026-08-19 18:30:12] [INFO]   [VIT] Processed 100/100 | Running Del AUC: 0.2129 | Ins AUC: 0.7129 | SSIM: 0.9939
+[2026-08-19 18:30:12] [INFO] 
+=====================================================================================
+[2026-08-19 18:30:12] [INFO] FINAL QUANTITATIVE RESULTS TABLE (GFM Format - 100 Stratified Samples)
+[2026-08-19 18:30:12] [INFO] =====================================================================================
+[2026-08-19 18:30:12] [INFO] | Model | XAI Method | Deletion AUC ↓ | Insertion AUC ↑ | Stability (SSIM) ↑ | Stability (IoU) ↑ | Stability (Pearson) ↑ |
+[2026-08-19 18:30:12] [INFO] | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+[2026-08-19 18:30:12] [INFO] | **CNN** | Grad-CAM | 0.3119 ± 0.265 | 0.6144 ± 0.253 | 0.8557 | 0.7907 | 0.9216 |
+[2026-08-19 18:30:12] [INFO] | **VNN** | Pairwise Volterra Map | 0.3250 ± 0.314 | 0.5725 ± 0.251 | 0.9947 | 0.8880 | 0.9949 |
+[2026-08-19 18:30:12] [INFO] | **VIT** | Attention Rollout | 0.2129 ± 0.200 | 0.7129 ± 0.221 | 0.9939 | 0.9321 | 0.9966 |
+[2026-08-19 18:30:12] [INFO] =====================================================================================
+

@@ -1,0 +1,45 @@
+[2026-08-19 18:30:16] [INFO] =====================================================================================
+[2026-08-19 18:30:16] [INFO] DEEP FEATURE & REPRESENTATION ANALYSIS SUITE (DERMAMNIST - 7 LESION CLASSES)
+[2026-08-19 18:30:16] [INFO] Checkpoints: CNN='cnn.pt', VNN='vnn.pt', ViT='vit.pt'
+[2026-08-19 18:30:16] [INFO] Target Stratified Samples: 100 (Seed: 42) | Log: 'representation_analysis.log'
+[2026-08-19 18:30:16] [INFO] =====================================================================================
+[2026-08-19 18:30:18] [INFO] Selected 100 Stratified Test Images (Class distribution: akiec: 14, bcc: 14, bkl: 14, df: 14, mel: 15, nv: 15, vasc: 14)
+[2026-08-19 18:30:18] [INFO] The exact same test image indices will be evaluated across CNN, VNN, and ViT.
+
+[2026-08-19 18:30:18] [INFO] Loaded CNN checkpoint from cnn.pt
+[2026-08-19 18:30:18] [INFO] Loaded VNN checkpoint from vnn.pt
+[2026-08-19 18:30:18] [INFO] Loaded VIT checkpoint from vit.pt
+[2026-08-19 18:30:18] [INFO] 
+Extracting latent representations on 100 DermaMNIST test samples...
+[2026-08-19 18:30:19] [INFO] 
+=====================================================================================
+[2026-08-19 18:30:19] [INFO] 1. QUANTITATIVE CLUSTER SEPARABILITY (100 Stratified Samples)
+[2026-08-19 18:30:19] [INFO] =====================================================================================
+[2026-08-19 18:30:19] [INFO] | Model | Feature Dim | Silhouette Score ↑ | Davies-Bouldin Index ↓ |
+[2026-08-19 18:30:19] [INFO] | :--- | :--- | :--- | :--- |
+[2026-08-19 18:30:19] [INFO] | **CNN** | 128 | 0.0159 | 3.0339 |
+[2026-08-19 18:30:19] [INFO] | **VNN** | 128 | 0.0065 | 2.8702 |
+[2026-08-19 18:30:19] [INFO] | **VIT** | 128 | 0.0484 | 2.6275 |
+[2026-08-19 18:30:19] [INFO] 
+=====================================================================================
+[2026-08-19 18:30:19] [INFO] 2. CROSS-ARCHITECTURE CKA SIMILARITY MATRIX (DermaMNIST)
+[2026-08-19 18:30:19] [INFO] =====================================================================================
+[2026-08-19 18:30:19] [INFO] | | CNN | VNN | VIT |
+[2026-08-19 18:30:19] [INFO] | :--- | :---: | :---: | :---: |
+[2026-08-19 18:30:19] [INFO] | **CNN** | 1.0000 | 0.7847 | 0.5287 |
+[2026-08-19 18:30:19] [INFO] | **VNN** | 0.7847 | 1.0000 | 0.5915 |
+[2026-08-19 18:30:19] [INFO] | **VIT** | 0.5287 | 0.5915 | 1.0000 |
+[2026-08-19 18:30:19] [INFO] 
+=====================================================================================
+[2026-08-19 18:30:19] [INFO] 3. VOLTERRA 2ND-ORDER POLYNOMIAL ENERGY RATIO BY LAYER
+[2026-08-19 18:30:19] [INFO] =====================================================================================
+[2026-08-19 18:30:19] [INFO]   - Early Layer (Stage 1) Quadratic Energy Ratio : 27.94%
+[2026-08-19 18:30:19] [INFO]   - Middle Layer (Stage 2) Quadratic Energy Ratio : 59.72%
+[2026-08-19 18:30:19] [INFO]   - Deep Layer (Stage 3) Quadratic Energy Ratio  : 67.55%
+[2026-08-19 18:30:19] [INFO] =====================================================================================
+
+[2026-08-19 18:30:21] [INFO] Saved representation_tsne.png with DermaMNIST lesion classes.
+[2026-08-19 18:30:21] [INFO] =====================================================================================
+[2026-08-19 18:30:21] [INFO] Deep Feature & Representation Analysis complete.
+[2026-08-19 18:30:21] [INFO] =====================================================================================
+
