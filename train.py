@@ -102,20 +102,47 @@ def get_dataset(data_dir: str = "./data", img_size: int = 32) -> Tuple[Dataset, 
 
 
 def get_dataloaders(batch_size: int = 128, data_dir: str = "./data",
-                    img_size: int = 32, num_workers: int = 0) -> Tuple[DataLoader, DataLoader, int, int]:
-    """Builds and returns training and test DataLoaders for DermaMNIST."""
+                    img_size: int = 32, num_workers: int = 0,
+                    balanced_sampling: bool = True) -> Tuple[DataLoader, DataLoader, int, int]:
+    """
+    Builds and returns training and test DataLoaders for DermaMNIST.
+    If balanced_sampling is True, uses WeightedRandomSampler to ensure balanced
+    class representation in every training mini-batch (Pillar 4).
+    """
     train_set, test_set, num_classes, in_channels = get_dataset(data_dir=data_dir, img_size=img_size)
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
+    if balanced_sampling:
+        from torch.utils.data import WeightedRandomSampler
+        if hasattr(train_set, "labels") and train_set.labels is not None:
+            train_labels = np.asarray(train_set.labels).squeeze()
+        else:
+            train_labels = np.array([int(np.asarray(train_set[i][1]).squeeze()) for i in range(len(train_set))])
+
+        class_counts = np.bincount(train_labels, minlength=num_classes)
+        class_weights = 1.0 / np.maximum(class_counts, 1)
+        sample_weights = class_weights[train_labels]
+        sampler = WeightedRandomSampler(
+            weights=torch.DoubleTensor(sample_weights),
+            num_samples=len(train_set),
+            replacement=True
+        )
+        train_loader = DataLoader(train_set, batch_size=batch_size, sampler=sampler, num_workers=num_workers)
+    else:
+        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
     test_loader = DataLoader(test_set, batch_size=batch_size * 2, shuffle=False, num_workers=num_workers)
     return train_loader, test_loader, num_classes, in_channels
 
 
 def get_stratified_sample_indices(dataset: Dataset, num_samples: int = 100,
-                                   random_seed: int = 42) -> List[int]:
+                                   random_seed: int = 42,
+                                   equal_allocation: bool = True) -> List[int]:
     """
-    Extracts stratified sample indices from a dataset (e.g., DermaMNIST test set)
-    ensuring all 7 skin lesion classes are represented with balanced/proportional coverage.
-    Guarantees reproducible, identical index lists across all model architectures.
+    Extracts stratified sample indices from a dataset (e.g., DermaMNIST test set).
+    
+    If equal_allocation=True (Pillar 1), allocates an EQUAL number of test samples to
+    all 7 lesion classes (~14-15 samples per class) to avoid benign majority-class bias.
+    If equal_allocation=False, allocates samples proportionally according to natural prevalence.
     """
     if hasattr(dataset, "labels") and dataset.labels is not None:
         all_labels = np.asarray(dataset.labels).squeeze()
@@ -123,6 +150,7 @@ def get_stratified_sample_indices(dataset: Dataset, num_samples: int = 100,
         all_labels = np.array([int(np.asarray(dataset[i][1]).squeeze()) for i in range(len(dataset))])
 
     unique_classes = np.unique(all_labels)
+    num_classes = len(unique_classes)
     total_len = len(all_labels)
     target_samples = min(num_samples, total_len)
 
@@ -131,31 +159,46 @@ def get_stratified_sample_indices(dataset: Dataset, num_samples: int = 100,
     for c in unique_classes:
         rng.shuffle(class_to_indices[c])
 
-    # Allocate counts proportionally, ensuring at least 1 sample per class
     counts = {}
-    remaining = target_samples
-    for c in unique_classes:
-        prop = len(class_to_indices[c]) / total_len
-        cnt = max(1, int(round(prop * target_samples)))
-        cnt = min(cnt, len(class_to_indices[c]))
-        counts[c] = cnt
-        remaining -= cnt
+    if equal_allocation:
+        # Pillar 1: Equal allocation across all classes (~14-15 samples each)
+        base_per_class = max(1, target_samples // num_classes)
+        counts = {c: min(base_per_class, len(class_to_indices[c])) for c in unique_classes}
+        remaining = target_samples - sum(counts.values())
 
-    # Adjust rounding differences
-    sorted_classes = sorted(unique_classes, key=lambda c: len(class_to_indices[c]), reverse=True)
-    idx = 0
-    while remaining > 0:
-        c = sorted_classes[idx % len(sorted_classes)]
-        if counts[c] < len(class_to_indices[c]):
-            counts[c] += 1
-            remaining -= 1
-        idx += 1
-    while remaining < 0:
-        c = sorted_classes[idx % len(sorted_classes)]
-        if counts[c] > 1:
-            counts[c] -= 1
-            remaining += 1
-        idx += 1
+        # Distribute remaining samples across classes with enough instances
+        sorted_classes = sorted(unique_classes, key=lambda c: len(class_to_indices[c]), reverse=True)
+        idx = 0
+        while remaining > 0 and idx < len(sorted_classes):
+            c = sorted_classes[idx % len(sorted_classes)]
+            if counts[c] < len(class_to_indices[c]):
+                counts[c] += 1
+                remaining -= 1
+            idx += 1
+    else:
+        # Natural proportional allocation
+        remaining = target_samples
+        for c in unique_classes:
+            prop = len(class_to_indices[c]) / total_len
+            cnt = max(1, int(round(prop * target_samples)))
+            cnt = min(cnt, len(class_to_indices[c]))
+            counts[c] = cnt
+            remaining -= cnt
+
+        sorted_classes = sorted(unique_classes, key=lambda c: len(class_to_indices[c]), reverse=True)
+        idx = 0
+        while remaining > 0:
+            c = sorted_classes[idx % len(sorted_classes)]
+            if counts[c] < len(class_to_indices[c]):
+                counts[c] += 1
+                remaining -= 1
+            idx += 1
+        while remaining < 0:
+            c = sorted_classes[idx % len(sorted_classes)]
+            if counts[c] > 1:
+                counts[c] -= 1
+                remaining += 1
+            idx += 1
 
     selected_indices = []
     for c in unique_classes:
@@ -251,19 +294,23 @@ def train(model_name: str, epochs: int = 20, lr: float = 1e-3,
           optimizer_name: str = "adamw", scheduler_name: str = "cosine",
           rank: int = 1, embed_dim: int = 128, depth: int = 4, heads: int = 4,
           base_channels: int = 32, dropout: float = 0.0,
+          balanced_sampler: bool = True,
           data_dir: str = "./data", out_csv: str = "results.csv",
           save_ckpt: str = None) -> Dict[str, Any]:
     """
-    Executes model training on DermaMNIST (7 classes) with PR-AUC logging.
+    Executes model training on DermaMNIST (7 classes) with PR-AUC logging
+    and optional WeightedRandomSampler class balancing (Pillar 4).
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("=" * 75)
     print(f"Training [{model_name.upper()}] on DermaMNIST (7 Lesion Classes) | Device: {device}")
+    print(f"Balanced Batch Sampler (Pillar 4): {balanced_sampler}")
     print("=" * 75)
 
     img_size = 32
     train_loader, test_loader, num_classes, in_channels = get_dataloaders(
-        batch_size=batch_size, data_dir=data_dir, img_size=img_size
+        batch_size=batch_size, data_dir=data_dir, img_size=img_size,
+        balanced_sampling=balanced_sampler
     )
 
     model = build_model(
@@ -387,6 +434,8 @@ if __name__ == "__main__":
     parser.add_argument("--heads", type=int, default=4, help="ViT heads")
     parser.add_argument("--base_channels", type=int, default=32, help="CNN / VNN base channels")
     parser.add_argument("--dropout", type=float, default=0.0)
+    parser.add_argument("--balanced_sampler", action="store_true", default=True, help="Use WeightedRandomSampler for class balance")
+    parser.add_argument("--no_balanced_sampler", action="store_false", dest="balanced_sampler", help="Disable WeightedRandomSampler")
     parser.add_argument("--data_dir", type=str, default="./data")
     parser.add_argument("--out_csv", type=str, default="results.csv")
     parser.add_argument("--save_ckpt", type=str, default=None)
@@ -406,6 +455,7 @@ if __name__ == "__main__":
         heads=args.heads,
         base_channels=args.base_channels,
         dropout=args.dropout,
+        balanced_sampler=args.balanced_sampler,
         data_dir=args.data_dir,
         out_csv=args.out_csv,
         save_ckpt=args.save_ckpt,

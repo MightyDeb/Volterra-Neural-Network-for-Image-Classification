@@ -19,7 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from scipy.ndimage import gaussian_filter
 
-from models import build_model
+from models import build_model, load_model_checkpoint
 from viz import generate_saliency_map
 from train import get_dataset, get_stratified_sample_indices, DERMAMNIST_CLASSES
 from logger_utils import setup_logger
@@ -306,13 +306,13 @@ def run_comprehensive_xai_suite(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
     summary_table = []
 
     for m_type, ckpt_path in models_info:
-        model = build_model(m_type, num_classes=7, in_channels=3, img_size=32)
-        if os.path.exists(ckpt_path):
-            model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
+        model = build_model(m_type, num_classes=7, in_channels=3, img_size=32).to(device)
+        loaded = load_model_checkpoint(model, ckpt_path, device=device)
+        if loaded:
             logger.info(f"Loaded {m_type.upper()} checkpoint from {ckpt_path}")
         else:
-            logger.warning(f"Checkpoint '{ckpt_path}' not found. Using initialized weights for {m_type.upper()}.")
-        model.to(device)
+            logger.warning(f"Checkpoint '{ckpt_path}' not found or incompatible. Using initialized weights for {m_type.upper()}.")
+        model.eval()
 
         res = evaluate_model_xai(model, m_type, test_set, stratified_indices, logger=logger)
         xai_method = {"cnn": "Grad-CAM", "vnn": "Pairwise Volterra Map", "vit": "Attention Rollout"}[m_type]
