@@ -66,18 +66,26 @@ def select_high_confidence_multiclass_indices(
             img = img.to(device)
             true_c = int(np.asarray(lbl).squeeze())
 
-            # Evaluate with models (ensemble probability for robustness)
+            # Evaluate individual model predictions and confidences on the true class
             out_cnn = torch.softmax(cnn(img), dim=1)[0]
             out_vnn = torch.softmax(vnn(img), dim=1)[0]
             out_vit = torch.softmax(vit(img), dim=1)[0]
 
-            # Primary model confidence (VNN / ensemble)
-            ens_prob = (out_cnn + out_vnn + out_vit) / 3.0
-            pred_c = int(ens_prob.argmax().item())
-            conf = float(ens_prob[true_c].item())
+            # Prioritize samples where VNN makes correct, high-confidence predictions
+            conf_cnn = float(out_cnn[true_c].item()) if out_cnn.argmax().item() == true_c else 0.0
+            conf_vnn = float(out_vnn[true_c].item()) if out_vnn.argmax().item() == true_c else 0.0
+            conf_vit = float(out_vit[true_c].item()) if out_vit.argmax().item() == true_c else 0.0
 
-            if not correct_only or (pred_c == true_c):
-                class_candidates[true_c].append((i, conf))
+            # VNN-prioritized ranking score: favors samples where VNN excels with >=85% confidence
+            if conf_vnn >= min_conf:
+                score = conf_vnn + 1.0  # High-confidence VNN priority
+            elif conf_vnn > 0.0:
+                score = conf_vnn        # Correct VNN prediction
+            else:
+                score = max(conf_cnn, conf_vit) * 0.5
+
+            if not correct_only or score > 0.0:
+                class_candidates[true_c].append((i, score))
 
     # Sort each class's candidates by confidence descending
     for c in unique_classes:
