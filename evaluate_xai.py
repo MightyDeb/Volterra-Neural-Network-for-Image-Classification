@@ -1,12 +1,12 @@
 """
-Quantitative Explainable AI (XAI) Evaluation Suite:
+Quantitative Explainable AI (XAI) Evaluation Suite on DermaMNIST (7 Lesion Classes):
   - 7.1 Deletion Metric & Deletion AUC (Faithfulness / Evidence Removal)
   - 7.2 Insertion Metric & Insertion AUC (Faithfulness / Evidence Introduction)
   - 7.3 Explanation Stability & Perturbation Invariance (SSIM, Pearson r, IoU)
   - 7.4 Pointing Game & Localization Overlap (Top-k IoU, Pointing Accuracy)
 
 Evaluates CNN (Grad-CAM), VNN (Volterra Pairwise Map), and ViT (Attention Rollout)
-across test batches to produce rigorous quantitative benchmarks.
+across DermaMNIST test batches to produce rigorous quantitative benchmarks.
 """
 
 import argparse
@@ -21,7 +21,7 @@ from scipy.ndimage import gaussian_filter
 
 from models import build_model
 from viz import generate_saliency_map
-from train import get_dataset
+from train import get_dataset, DERMAMNIST_CLASSES
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,6 @@ def compute_deletion_curve(model: nn.Module, img: torch.Tensor, saliency_map: np
     percentages = [0.0]
 
     img_modified = img.clone()
-    # Baseline replacement color (mean image color or 0)
     baseline_val = img.mean().item()
 
     step_size = total_pixels // steps
@@ -63,7 +62,6 @@ def compute_deletion_curve(model: nn.Module, img: torch.Tensor, saliency_map: np
         mask_2d[idx_to_mask] = True
         mask_2d = torch.tensor(mask_2d.reshape(h, w), device=device, dtype=torch.bool)
 
-        # Mask pixels across all channels
         for c in range(img.shape[1]):
             img_modified[0, c][mask_2d] = baseline_val
 
@@ -73,7 +71,6 @@ def compute_deletion_curve(model: nn.Module, img: torch.Tensor, saliency_map: np
             probabilities.append(prob)
             percentages.append(step / steps)
 
-    # Trapezoid integration for Deletion AUC
     deletion_auc = float(np.trapz(probabilities, percentages))
     return np.array(probabilities), deletion_auc
 
@@ -208,7 +205,7 @@ def pointing_game_accuracy(saliency_map: np.ndarray, ground_truth_mask: np.ndarr
 def evaluate_model_xai(model: nn.Module, model_type: str, test_dataset,
                        num_samples: int = 50) -> Dict[str, float]:
     """
-    Runs quantitative XAI evaluation over a sample set of test instances.
+    Runs quantitative XAI evaluation over DermaMNIST test instances.
     """
     deletion_aucs = []
     insertion_aucs = []
@@ -217,7 +214,7 @@ def evaluate_model_xai(model: nn.Module, model_type: str, test_dataset,
     ious = []
 
     n_eval = min(num_samples, len(test_dataset))
-    print(f"Evaluating XAI Quantitative Metrics for [{model_type.upper()}] on {n_eval} samples...")
+    print(f"Evaluating XAI Quantitative Metrics for [{model_type.upper()}] on {n_eval} DermaMNIST samples...")
 
     for i in range(n_eval):
         item = test_dataset[i]
@@ -254,13 +251,12 @@ def evaluate_model_xai(model: nn.Module, model_type: str, test_dataset,
 
 
 def run_comprehensive_xai_suite(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.pt",
-                                vit_ckpt: str = "vit.pt", dataset_name: str = "dermamnist",
-                                num_samples: int = 30) -> None:
+                                vit_ckpt: str = "vit.pt", num_samples: int = 30) -> None:
     """
-    Loads CNN, VNN, and ViT checkpoints and evaluates them on quantitative XAI metrics.
+    Loads CNN, VNN, and ViT checkpoints and evaluates them on DermaMNIST quantitative XAI metrics.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_set, test_set, num_classes, in_channels = get_dataset(dataset_name, img_size=32)
+    train_set, test_set, num_classes, in_channels = get_dataset(img_size=32)
 
     models_info = [
         ("cnn", cnn_ckpt),
@@ -270,11 +266,11 @@ def run_comprehensive_xai_suite(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
 
     summary_table = []
     print("\n" + "=" * 80)
-    print(f"QUANTITATIVE EXPLAINABLE AI (XAI) EVALUATION BENCHMARK ({dataset_name.upper()})")
+    print("QUANTITATIVE EXPLAINABLE AI (XAI) EVALUATION BENCHMARK (DERMAMNIST - 7 CLASSES)")
     print("=" * 80)
 
     for m_type, ckpt_path in models_info:
-        model = build_model(m_type, num_classes=num_classes, in_channels=in_channels, img_size=32)
+        model = build_model(m_type, num_classes=7, in_channels=3, img_size=32)
         if os.path.exists(ckpt_path):
             model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
             print(f"Loaded checkpoint: {ckpt_path}")
@@ -305,11 +301,10 @@ def run_comprehensive_xai_suite(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate Quantitative XAI Metrics")
+    parser = argparse.ArgumentParser(description="Evaluate Quantitative XAI Metrics on DermaMNIST")
     parser.add_argument("--cnn_ckpt", type=str, default="cnn.pt")
     parser.add_argument("--vnn_ckpt", type=str, default="vnn.pt")
     parser.add_argument("--vit_ckpt", type=str, default="vit.pt")
-    parser.add_argument("--dataset", type=str, default="cifar10")
     parser.add_argument("--num_samples", type=int, default=20)
     args = parser.parse_args()
 
@@ -317,6 +312,5 @@ if __name__ == "__main__":
         cnn_ckpt=args.cnn_ckpt,
         vnn_ckpt=args.vnn_ckpt,
         vit_ckpt=args.vit_ckpt,
-        dataset_name=args.dataset,
         num_samples=args.num_samples,
     )

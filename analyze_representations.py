@@ -1,7 +1,7 @@
 """
-Deep Feature & Representation Analysis Suite:
+Deep Feature & Representation Analysis Suite for DermaMNIST (7 Lesion Classes):
   - 8.1 Intermediate Layer Feature Activations
-  - 8.2 Latent Feature-Space Geometry (t-SNE / PCA Dimensionality Reduction)
+  - 8.2 Latent Feature-Space Geometry (t-SNE / PCA on Skin Lesion Embeddings)
   - 8.3 Quantitative Cluster Separability (Silhouette Score, Davies-Bouldin Index)
   - 8.4 Cross-Architecture Centered Kernel Alignment (Linear & RBF CKA)
   - 8.5 Volterra 2nd-Order Feature Interaction Energy Breakdown
@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 
 from models import build_model, SimpleVNN
-from train import get_dataset
+from train import get_dataset, DERMAMNIST_CLASSES
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,6 @@ def linear_cka(X: np.ndarray, Y: np.ndarray) -> float:
     Returns:
         float similarity score in [0.0, 1.0]
     """
-    # Center columns
     X = X - np.mean(X, axis=0, keepdims=True)
     Y = Y - np.mean(Y, axis=0, keepdims=True)
 
@@ -62,9 +61,7 @@ def linear_cka(X: np.ndarray, Y: np.ndarray) -> float:
 
 
 def compute_cross_model_cka(features_dict: Dict[str, np.ndarray]) -> Tuple[np.ndarray, List[str]]:
-    """
-    Computes a symmetric CKA similarity matrix across models/representations.
-    """
+    """Computes symmetric CKA similarity matrix across models/representations."""
     names = list(features_dict.keys())
     n = len(names)
     matrix = np.zeros((n, n))
@@ -86,7 +83,7 @@ def compute_cross_model_cka(features_dict: Dict[str, np.ndarray]) -> Tuple[np.nd
 # ---------------------------------------------------------------------------
 def extract_dataset_embeddings(model: nn.Module, dataset, num_samples: int = 300) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Extracts penultimate feature vectors and labels for a subset of samples.
+    Extracts penultimate feature vectors and labels for DermaMNIST samples.
     """
     model.eval()
     device = next(model.parameters()).device
@@ -115,7 +112,6 @@ def compute_separability_metrics(features: np.ndarray, labels: np.ndarray) -> Di
     """
     Computes Silhouette Score and Davies-Bouldin Index on native embeddings.
     """
-    # Check if multiple distinct classes exist
     unique_classes = np.unique(labels)
     if len(unique_classes) < 2:
         return {"silhouette_score": 0.0, "davies_bouldin_index": 0.0}
@@ -177,17 +173,17 @@ def analyze_volterra_energy(vnn_model: SimpleVNN, dataset, num_samples: int = 10
 # 4. Master Analysis Pipeline
 # ---------------------------------------------------------------------------
 def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.pt",
-                                vit_ckpt: str = "vit.pt", dataset_name: str = "dermamnist",
-                                num_samples: int = 300, save_plots: bool = True) -> None:
+                                vit_ckpt: str = "vit.pt", num_samples: int = 300,
+                                save_plots: bool = True) -> None:
     """
-    Executes full latent geometry, CKA similarity, separability, and Volterra energy analysis.
+    Executes representation analysis on DermaMNIST (7 skin lesion classes).
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train_set, test_set, num_classes, in_channels = get_dataset(dataset_name, img_size=32)
+    train_set, test_set, num_classes, in_channels = get_dataset(img_size=32)
 
     models = {}
     for m_type, ckpt in [("cnn", cnn_ckpt), ("vnn", vnn_ckpt), ("vit", vit_ckpt)]:
-        m = build_model(m_type, num_classes=num_classes, in_channels=in_channels, img_size=32)
+        m = build_model(m_type, num_classes=7, in_channels=3, img_size=32)
         if os.path.exists(ckpt):
             m.load_state_dict(torch.load(ckpt, map_location="cpu"))
             print(f"Loaded {m_type.upper()} checkpoint from {ckpt}")
@@ -197,7 +193,7 @@ def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
         models[m_type] = m
 
     # Extract Embeddings
-    print(f"\nExtracting latent representations on {min(num_samples, len(test_set))} samples...")
+    print(f"\nExtracting latent representations on {min(num_samples, len(test_set))} DermaMNIST samples...")
     embeddings = {}
     labels_dict = {}
     for m_type in ["cnn", "vnn", "vit"]:
@@ -207,7 +203,7 @@ def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
 
     # 1. Separability Metrics
     print("\n" + "=" * 75)
-    print("1. QUANTITATIVE CLUSTER SEPARABILITY (Penultimate Latent Space)")
+    print("1. QUANTITATIVE CLUSTER SEPARABILITY (DermaMNIST Latent Embeddings)")
     print("=" * 75)
     print("| Model | Feature Dim | Silhouette Score ↑ | Davies-Bouldin Index ↓ |")
     print("| :--- | :--- | :--- | :--- |")
@@ -219,7 +215,7 @@ def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
     # 2. CKA Matrix
     cka_matrix, names = compute_cross_model_cka(embeddings)
     print("\n" + "=" * 75)
-    print("2. CROSS-ARCHITECTURE CKA SIMILARITY MATRIX")
+    print("2. CROSS-ARCHITECTURE CKA SIMILARITY MATRIX (DermaMNIST)")
     print("=" * 75)
     header = "| | " + " | ".join([n.upper() for n in names]) + " |"
     divider = "| :--- | " + " | ".join([":---:" for _ in names]) + " |"
@@ -239,7 +235,7 @@ def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
     print(f"  - Deep Layer (Stage 3) Quadratic Energy Ratio  : {vnn_energy['layer3_quad_ratio_mean']*100:.2f}%")
     print("=" * 75 + "\n")
 
-    # Save visual figures if requested
+    # Save t-SNE scatter plot
     if save_plots:
         try:
             from sklearn.manifold import TSNE
@@ -247,23 +243,28 @@ def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
             for idx, m_type in enumerate(["cnn", "vnn", "vit"]):
                 tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, len(embeddings[m_type]) - 1))
                 proj = tsne.fit_transform(embeddings[m_type])
-                scatter = axes[idx].scatter(proj[:, 0], proj[:, 1], c=labels_dict[m_type], cmap="tab10", alpha=0.8, s=25)
+                scatter = axes[idx].scatter(
+                    proj[:, 0], proj[:, 1], c=labels_dict[m_type], cmap="tab10", alpha=0.8, s=25
+                )
                 axes[idx].set_title(f"{m_type.upper()} Latent Space (t-SNE)", fontsize=13, fontweight="bold")
                 axes[idx].axis("off")
-            plt.colorbar(scatter, ax=axes, orientation="horizontal", fraction=0.04, pad=0.08)
+
+            cbar = plt.colorbar(scatter, ax=axes, orientation="horizontal", fraction=0.04, pad=0.08)
+            cbar.set_ticks(range(7))
+            cbar.set_ticklabels(DERMAMNIST_CLASSES)
+            plt.suptitle("DermaMNIST Skin Lesion Class Clusters (t-SNE)", fontsize=14, fontweight="bold")
             plt.tight_layout()
             plt.savefig("representation_tsne.png", dpi=150)
-            print("Saved representation_tsne.png")
+            print("Saved representation_tsne.png with DermaMNIST lesion classes.")
         except Exception as e:
             print(f"[Notice] Skipping t-SNE plot generation ({e})")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Deep Feature & Representation Analysis")
+    parser = argparse.ArgumentParser(description="Deep Feature & Representation Analysis on DermaMNIST")
     parser.add_argument("--cnn_ckpt", type=str, default="cnn.pt")
     parser.add_argument("--vnn_ckpt", type=str, default="vnn.pt")
     parser.add_argument("--vit_ckpt", type=str, default="vit.pt")
-    parser.add_argument("--dataset", type=str, default="cifar10")
     parser.add_argument("--num_samples", type=int, default=150)
     args = parser.parse_args()
 
@@ -271,6 +272,5 @@ if __name__ == "__main__":
         cnn_ckpt=args.cnn_ckpt,
         vnn_ckpt=args.vnn_ckpt,
         vit_ckpt=args.vit_ckpt,
-        dataset_name=args.dataset,
         num_samples=args.num_samples,
     )

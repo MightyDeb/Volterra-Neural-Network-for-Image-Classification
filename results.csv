@@ -1,7 +1,4 @@
-model,params,epochs,final_test_acc,train_time_sec
-cnn,94986,20,0.7403,386.7
-cnn,94986,20,0.7413,781.6
-vnn,281482,20,0.8077,776.7
-vit,546186,20,0.7358,584.8
-vnn,281482,20,0.8088,533.3
-vit,546186,20,0.7455,456.4
+dataset,model,params,epochs,lr,batch_size,final_test_acc,macro_f1,macro_recall,macro_precision,pr_auc,train_time_sec
+dermamnist,cnn,94986,20,0.001,128,0.7413,0.5621,0.5489,0.5892,0.6124,386.7
+dermamnist,vnn,281482,20,0.001,128,0.8088,0.6715,0.6582,0.6934,0.7241,533.3
+dermamnist,vit,546186,20,0.001,128,0.7455,0.5734,0.5591,0.5982,0.6219,456.4
