@@ -17,7 +17,8 @@ import torch
 import torch.nn as nn
 
 from models import build_model, SimpleVNN
-from train import get_dataset, DERMAMNIST_CLASSES
+from train import get_dataset, get_stratified_sample_indices, DERMAMNIST_CLASSES
+from logger_utils import setup_logger
 
 
 # ---------------------------------------------------------------------------
@@ -81,20 +82,19 @@ def compute_cross_model_cka(features_dict: Dict[str, np.ndarray]) -> Tuple[np.nd
 # ---------------------------------------------------------------------------
 # 2. Feature-Space Geometry & Quantitative Separability
 # ---------------------------------------------------------------------------
-def extract_dataset_embeddings(model: nn.Module, dataset, num_samples: int = 300) -> Tuple[np.ndarray, np.ndarray]:
+def extract_dataset_embeddings(model: nn.Module, dataset, sample_indices: List[int]) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Extracts penultimate feature vectors and labels for DermaMNIST samples.
+    Extracts penultimate feature vectors and labels for specified DermaMNIST sample indices.
     """
     model.eval()
     device = next(model.parameters()).device
-    n_eval = min(num_samples, len(dataset))
 
     features = []
     labels = []
 
     with torch.no_grad():
-        for i in range(n_eval):
-            img, label = dataset[i]
+        for idx in sample_indices:
+            img, label = dataset[idx]
             if isinstance(img, np.ndarray):
                 img = torch.tensor(img)
             if img.ndim == 3:
@@ -129,19 +129,19 @@ def compute_separability_metrics(features: np.ndarray, labels: np.ndarray) -> Di
 # ---------------------------------------------------------------------------
 # 3. Volterra 2nd-Order Energy Analysis
 # ---------------------------------------------------------------------------
-def analyze_volterra_energy(vnn_model: SimpleVNN, dataset, num_samples: int = 100) -> Dict[str, float]:
+def analyze_volterra_energy(vnn_model: SimpleVNN, dataset, sample_indices: List[int]) -> Dict[str, float]:
     """
-    Computes the quadratic interaction energy ratio across layers in SimpleVNN.
+    Computes the quadratic interaction energy ratio across layers in SimpleVNN
+    on specified sample indices.
     """
     vnn_model.eval()
     device = next(vnn_model.parameters()).device
-    n_eval = min(num_samples, len(dataset))
 
     layer_ratios = {"layer1": [], "layer2": [], "layer3": []}
 
     with torch.no_grad():
-        for i in range(n_eval):
-            img, _ = dataset[i]
+        for idx in sample_indices:
+            img, _ = dataset[idx]
             if isinstance(img, np.ndarray):
                 img = torch.tensor(img)
             if img.ndim == 3:
@@ -173,67 +173,89 @@ def analyze_volterra_energy(vnn_model: SimpleVNN, dataset, num_samples: int = 10
 # 4. Master Analysis Pipeline
 # ---------------------------------------------------------------------------
 def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.pt",
-                                vit_ckpt: str = "vit.pt", num_samples: int = 300,
-                                save_plots: bool = True) -> None:
+                                vit_ckpt: str = "vit.pt", num_samples: int = 100,
+                                random_seed: int = 42, save_plots: bool = True,
+                                log_file: str = "representation_analysis.log") -> None:
     """
-    Executes representation analysis on DermaMNIST (7 skin lesion classes).
+    Executes representation analysis on DermaMNIST (7 skin lesion classes)
+    using identical stratified test set samples (100 samples by default) and logs all metrics to disk.
     """
+    logger = setup_logger("AnalyzeRepresentations", log_file)
+    logger.info("=" * 85)
+    logger.info("DEEP FEATURE & REPRESENTATION ANALYSIS SUITE (DERMAMNIST - 7 LESION CLASSES)")
+    logger.info(f"Checkpoints: CNN='{cnn_ckpt}', VNN='{vnn_ckpt}', ViT='{vit_ckpt}'")
+    logger.info(f"Target Stratified Samples: {num_samples} (Seed: {random_seed}) | Log: '{log_file}'")
+    logger.info("=" * 85)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_set, test_set, num_classes, in_channels = get_dataset(img_size=32)
+
+    # Extract deterministic stratified sample indices
+    stratified_indices = get_stratified_sample_indices(test_set, num_samples=num_samples, random_seed=random_seed)
+
+    if hasattr(test_set, "labels") and test_set.labels is not None:
+        sample_labels = [int(np.asarray(test_set.labels)[i].squeeze()) for i in stratified_indices]
+    else:
+        sample_labels = [int(np.asarray(test_set[i][1]).squeeze()) for i in stratified_indices]
+
+    class_counts = {c_idx: sample_labels.count(c_idx) for c_idx in range(7)}
+    breakdown_str = ", ".join([f"{DERMAMNIST_CLASSES[c]}: {class_counts[c]}" for c in range(7)])
+    logger.info(f"Selected {len(stratified_indices)} Stratified Test Images (Class distribution: {breakdown_str})")
+    logger.info("The exact same test image indices will be evaluated across CNN, VNN, and ViT.\n")
 
     models = {}
     for m_type, ckpt in [("cnn", cnn_ckpt), ("vnn", vnn_ckpt), ("vit", vit_ckpt)]:
         m = build_model(m_type, num_classes=7, in_channels=3, img_size=32)
         if os.path.exists(ckpt):
             m.load_state_dict(torch.load(ckpt, map_location="cpu"))
-            print(f"Loaded {m_type.upper()} checkpoint from {ckpt}")
+            logger.info(f"Loaded {m_type.upper()} checkpoint from {ckpt}")
         else:
-            print(f"[Notice] Checkpoint {ckpt} not found. Running with initialized weights.")
+            logger.warning(f"Checkpoint '{ckpt}' not found. Running with initialized weights for {m_type.upper()}.")
         m.to(device)
         models[m_type] = m
 
     # Extract Embeddings
-    print(f"\nExtracting latent representations on {min(num_samples, len(test_set))} DermaMNIST samples...")
+    logger.info(f"\nExtracting latent representations on {len(stratified_indices)} DermaMNIST test samples...")
     embeddings = {}
     labels_dict = {}
     for m_type in ["cnn", "vnn", "vit"]:
-        feat, lbls = extract_dataset_embeddings(models[m_type], test_set, num_samples=num_samples)
+        feat, lbls = extract_dataset_embeddings(models[m_type], test_set, sample_indices=stratified_indices)
         embeddings[m_type] = feat
         labels_dict[m_type] = lbls
 
     # 1. Separability Metrics
-    print("\n" + "=" * 75)
-    print("1. QUANTITATIVE CLUSTER SEPARABILITY (DermaMNIST Latent Embeddings)")
-    print("=" * 75)
-    print("| Model | Feature Dim | Silhouette Score ↑ | Davies-Bouldin Index ↓ |")
-    print("| :--- | :--- | :--- | :--- |")
+    logger.info("\n" + "=" * 85)
+    logger.info(f"1. QUANTITATIVE CLUSTER SEPARABILITY ({len(stratified_indices)} Stratified Samples)")
+    logger.info("=" * 85)
+    logger.info("| Model | Feature Dim | Silhouette Score ↑ | Davies-Bouldin Index ↓ |")
+    logger.info("| :--- | :--- | :--- | :--- |")
     for m_type in ["cnn", "vnn", "vit"]:
         sep = compute_separability_metrics(embeddings[m_type], labels_dict[m_type])
         dim = embeddings[m_type].shape[1]
-        print(f"| **{m_type.upper()}** | {dim} | {sep['silhouette_score']:.4f} | {sep['davies_bouldin_index']:.4f} |")
+        logger.info(f"| **{m_type.upper()}** | {dim} | {sep['silhouette_score']:.4f} | {sep['davies_bouldin_index']:.4f} |")
 
     # 2. CKA Matrix
     cka_matrix, names = compute_cross_model_cka(embeddings)
-    print("\n" + "=" * 75)
-    print("2. CROSS-ARCHITECTURE CKA SIMILARITY MATRIX (DermaMNIST)")
-    print("=" * 75)
+    logger.info("\n" + "=" * 85)
+    logger.info("2. CROSS-ARCHITECTURE CKA SIMILARITY MATRIX (DermaMNIST)")
+    logger.info("=" * 85)
     header = "| | " + " | ".join([n.upper() for n in names]) + " |"
     divider = "| :--- | " + " | ".join([":---:" for _ in names]) + " |"
-    print(header)
-    print(divider)
+    logger.info(header)
+    logger.info(divider)
     for i, row_name in enumerate(names):
         vals = " | ".join([f"{cka_matrix[i, j]:.4f}" for j in range(len(names))])
-        print(f"| **{row_name.upper()}** | {vals} |")
+        logger.info(f"| **{row_name.upper()}** | {vals} |")
 
     # 3. Volterra Branch Energy Breakdown
-    vnn_energy = analyze_volterra_energy(models["vnn"], test_set, num_samples=min(100, num_samples))
-    print("\n" + "=" * 75)
-    print("3. VOLTERRA 2ND-ORDER POLYNOMIAL ENERGY RATIO BY LAYER")
-    print("=" * 75)
-    print(f"  - Early Layer (Stage 1) Quadratic Energy Ratio : {vnn_energy['layer1_quad_ratio_mean']*100:.2f}%")
-    print(f"  - Middle Layer (Stage 2) Quadratic Energy Ratio : {vnn_energy['layer2_quad_ratio_mean']*100:.2f}%")
-    print(f"  - Deep Layer (Stage 3) Quadratic Energy Ratio  : {vnn_energy['layer3_quad_ratio_mean']*100:.2f}%")
-    print("=" * 75 + "\n")
+    vnn_energy = analyze_volterra_energy(models["vnn"], test_set, sample_indices=stratified_indices)
+    logger.info("\n" + "=" * 85)
+    logger.info("3. VOLTERRA 2ND-ORDER POLYNOMIAL ENERGY RATIO BY LAYER")
+    logger.info("=" * 85)
+    logger.info(f"  - Early Layer (Stage 1) Quadratic Energy Ratio : {vnn_energy['layer1_quad_ratio_mean']*100:.2f}%")
+    logger.info(f"  - Middle Layer (Stage 2) Quadratic Energy Ratio : {vnn_energy['layer2_quad_ratio_mean']*100:.2f}%")
+    logger.info(f"  - Deep Layer (Stage 3) Quadratic Energy Ratio  : {vnn_energy['layer3_quad_ratio_mean']*100:.2f}%")
+    logger.info("=" * 85 + "\n")
 
     # Save t-SNE scatter plot
     if save_plots:
@@ -252,12 +274,19 @@ def run_representation_analysis(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
             cbar = plt.colorbar(scatter, ax=axes, orientation="horizontal", fraction=0.04, pad=0.08)
             cbar.set_ticks(range(7))
             cbar.set_ticklabels(DERMAMNIST_CLASSES)
-            plt.suptitle("DermaMNIST Skin Lesion Class Clusters (t-SNE)", fontsize=14, fontweight="bold")
+            plt.suptitle(f"DermaMNIST Skin Lesion Class Clusters (t-SNE - {len(stratified_indices)} Stratified Samples)",
+                         fontsize=14, fontweight="bold")
             plt.tight_layout()
-            plt.savefig("representation_tsne.png", dpi=150)
-            print("Saved representation_tsne.png with DermaMNIST lesion classes.")
+            out_tsne = "representation_tsne.png"
+            plt.savefig(out_tsne, dpi=150)
+            plt.close(fig)
+            logger.info(f"Saved {out_tsne} with DermaMNIST lesion classes.")
         except Exception as e:
-            print(f"[Notice] Skipping t-SNE plot generation ({e})")
+            logger.warning(f"Skipping t-SNE plot generation ({e})")
+
+    logger.info("=" * 85)
+    logger.info("Deep Feature & Representation Analysis complete.")
+    logger.info("=" * 85 + "\n")
 
 
 if __name__ == "__main__":
@@ -265,7 +294,9 @@ if __name__ == "__main__":
     parser.add_argument("--cnn_ckpt", type=str, default="cnn.pt")
     parser.add_argument("--vnn_ckpt", type=str, default="vnn.pt")
     parser.add_argument("--vit_ckpt", type=str, default="vit.pt")
-    parser.add_argument("--num_samples", type=int, default=150)
+    parser.add_argument("--num_samples", type=int, default=100, help="Number of stratified test samples to evaluate")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for deterministic stratified sampling")
+    parser.add_argument("--log_file", type=str, default="representation_analysis.log", help="Path to output log file")
     args = parser.parse_args()
 
     run_representation_analysis(
@@ -273,4 +304,7 @@ if __name__ == "__main__":
         vnn_ckpt=args.vnn_ckpt,
         vit_ckpt=args.vit_ckpt,
         num_samples=args.num_samples,
+        random_seed=args.seed,
+        log_file=args.log_file,
     )
+

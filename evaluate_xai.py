@@ -21,7 +21,8 @@ from scipy.ndimage import gaussian_filter
 
 from models import build_model
 from viz import generate_saliency_map
-from train import get_dataset, DERMAMNIST_CLASSES
+from train import get_dataset, get_stratified_sample_indices, DERMAMNIST_CLASSES
+from logger_utils import setup_logger
 
 
 # ---------------------------------------------------------------------------
@@ -203,9 +204,9 @@ def pointing_game_accuracy(saliency_map: np.ndarray, ground_truth_mask: np.ndarr
 # 4. Batch Quantitative Evaluation Runner
 # ---------------------------------------------------------------------------
 def evaluate_model_xai(model: nn.Module, model_type: str, test_dataset,
-                       num_samples: int = 50) -> Dict[str, float]:
+                       sample_indices: List[int], logger=None) -> Dict[str, float]:
     """
-    Runs quantitative XAI evaluation over DermaMNIST test instances.
+    Runs quantitative XAI evaluation over specified stratified test indices.
     """
     deletion_aucs = []
     insertion_aucs = []
@@ -213,11 +214,15 @@ def evaluate_model_xai(model: nn.Module, model_type: str, test_dataset,
     pearsons = []
     ious = []
 
-    n_eval = min(num_samples, len(test_dataset))
-    print(f"Evaluating XAI Quantitative Metrics for [{model_type.upper()}] on {n_eval} DermaMNIST samples...")
+    n_eval = len(sample_indices)
+    msg = f"Evaluating XAI Quantitative Metrics for [{model_type.upper()}] on {n_eval} Stratified Test Samples..."
+    if logger:
+        logger.info(msg)
+    else:
+        print(msg)
 
-    for i in range(n_eval):
-        item = test_dataset[i]
+    for step_i, idx in enumerate(sample_indices, start=1):
+        item = test_dataset[idx]
         img = item[0]
         if isinstance(img, np.ndarray):
             img = torch.tensor(img)
@@ -238,6 +243,16 @@ def evaluate_model_xai(model: nn.Module, model_type: str, test_dataset,
         pearsons.append(stab["stability_pearson"])
         ious.append(stab["stability_iou"])
 
+        if step_i % 25 == 0 or step_i == n_eval:
+            progress_msg = (
+                f"  [{model_type.upper()}] Processed {step_i:03d}/{n_eval:03d} | "
+                f"Running Del AUC: {np.mean(deletion_aucs):.4f} | "
+                f"Ins AUC: {np.mean(insertion_aucs):.4f} | "
+                f"SSIM: {np.mean(ssims):.4f}"
+            )
+            if logger:
+                logger.info(progress_msg)
+
     results = {
         "deletion_auc_mean": float(np.mean(deletion_aucs)),
         "deletion_auc_std": float(np.std(deletion_aucs)),
@@ -251,12 +266,36 @@ def evaluate_model_xai(model: nn.Module, model_type: str, test_dataset,
 
 
 def run_comprehensive_xai_suite(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.pt",
-                                vit_ckpt: str = "vit.pt", num_samples: int = 30) -> None:
+                                vit_ckpt: str = "vit.pt", num_samples: int = 100,
+                                random_seed: int = 42,
+                                log_file: str = "xai_evaluation.log") -> None:
     """
-    Loads CNN, VNN, and ViT checkpoints and evaluates them on DermaMNIST quantitative XAI metrics.
+    Loads CNN, VNN, and ViT checkpoints and evaluates them on DermaMNIST quantitative XAI metrics
+    using identical stratified test set samples (100 samples by default), logging all metrics to disk.
     """
+    logger = setup_logger("EvaluateXAI", log_file)
+    logger.info("=" * 85)
+    logger.info("QUANTITATIVE EXPLAINABLE AI (XAI) EVALUATION BENCHMARK (DERMAMNIST - 7 CLASSES)")
+    logger.info(f"Checkpoints: CNN='{cnn_ckpt}', VNN='{vnn_ckpt}', ViT='{vit_ckpt}'")
+    logger.info(f"Target Stratified Samples: {num_samples} (Seed: {random_seed}) | Log: '{log_file}'")
+    logger.info("=" * 85)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_set, test_set, num_classes, in_channels = get_dataset(img_size=32)
+
+    # Extract deterministic stratified sample indices from the Test set
+    stratified_indices = get_stratified_sample_indices(test_set, num_samples=num_samples, random_seed=random_seed)
+    
+    # Log class breakdown of the sampled 100 test images
+    if hasattr(test_set, "labels") and test_set.labels is not None:
+        sample_labels = [int(np.asarray(test_set.labels)[i].squeeze()) for i in stratified_indices]
+    else:
+        sample_labels = [int(np.asarray(test_set[i][1]).squeeze()) for i in stratified_indices]
+        
+    class_counts = {c_idx: sample_labels.count(c_idx) for c_idx in range(7)}
+    breakdown_str = ", ".join([f"{DERMAMNIST_CLASSES[c]}: {class_counts[c]}" for c in range(7)])
+    logger.info(f"Selected {len(stratified_indices)} Stratified Test Images (Class distribution: {breakdown_str})")
+    logger.info("The exact same test image indices will be evaluated across CNN, VNN, and ViT.\n")
 
     models_info = [
         ("cnn", cnn_ckpt),
@@ -265,20 +304,17 @@ def run_comprehensive_xai_suite(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
     ]
 
     summary_table = []
-    print("\n" + "=" * 80)
-    print("QUANTITATIVE EXPLAINABLE AI (XAI) EVALUATION BENCHMARK (DERMAMNIST - 7 CLASSES)")
-    print("=" * 80)
 
     for m_type, ckpt_path in models_info:
         model = build_model(m_type, num_classes=7, in_channels=3, img_size=32)
         if os.path.exists(ckpt_path):
             model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
-            print(f"Loaded checkpoint: {ckpt_path}")
+            logger.info(f"Loaded {m_type.upper()} checkpoint from {ckpt_path}")
         else:
-            print(f"[Notice] Checkpoint {ckpt_path} not found. Running with initialized weights for layout verification.")
+            logger.warning(f"Checkpoint '{ckpt_path}' not found. Using initialized weights for {m_type.upper()}.")
         model.to(device)
 
-        res = evaluate_model_xai(model, m_type, test_set, num_samples=num_samples)
+        res = evaluate_model_xai(model, m_type, test_set, stratified_indices, logger=logger)
         xai_method = {"cnn": "Grad-CAM", "vnn": "Pairwise Volterra Map", "vit": "Attention Rollout"}[m_type]
         summary_table.append({
             "Model": m_type.upper(),
@@ -287,17 +323,21 @@ def run_comprehensive_xai_suite(cnn_ckpt: str = "cnn.pt", vnn_ckpt: str = "vnn.p
             "Insertion AUC ↑": f"{res['insertion_auc_mean']:.4f} ± {res['insertion_auc_std']:.3f}",
             "Stability SSIM ↑": f"{res['stability_ssim_mean']:.4f}",
             "Stability IoU ↑": f"{res['stability_iou_mean']:.4f}",
+            "Stability Pearson ↑": f"{res['stability_pearson_mean']:.4f}",
         })
 
-    # Print Markdown Table
-    print("\n" + "=" * 80)
-    print("QUANTITATIVE RESULTS TABLE (GFM Format)")
-    print("=" * 80)
-    print("| Model | XAI Method | Deletion AUC ↓ | Insertion AUC ↑ | Stability (SSIM) ↑ | Stability (IoU) ↑ |")
-    print("| :--- | :--- | :--- | :--- | :--- | :--- |")
+    # Log & Print Markdown Table
+    logger.info("\n" + "=" * 85)
+    logger.info(f"FINAL QUANTITATIVE RESULTS TABLE (GFM Format - {len(stratified_indices)} Stratified Samples)")
+    logger.info("=" * 85)
+    logger.info("| Model | XAI Method | Deletion AUC ↓ | Insertion AUC ↑ | Stability (SSIM) ↑ | Stability (IoU) ↑ | Stability (Pearson) ↑ |")
+    logger.info("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
     for row in summary_table:
-        print(f"| **{row['Model']}** | {row['XAI Method']} | {row['Deletion AUC ↓']} | {row['Insertion AUC ↑']} | {row['Stability SSIM ↑']} | {row['Stability IoU ↑']} |")
-    print("=" * 80 + "\n")
+        logger.info(
+            f"| **{row['Model']}** | {row['XAI Method']} | {row['Deletion AUC ↓']} | "
+            f"{row['Insertion AUC ↑']} | {row['Stability SSIM ↑']} | {row['Stability IoU ↑']} | {row['Stability Pearson ↑']} |"
+        )
+    logger.info("=" * 85 + "\n")
 
 
 if __name__ == "__main__":
@@ -305,7 +345,9 @@ if __name__ == "__main__":
     parser.add_argument("--cnn_ckpt", type=str, default="cnn.pt")
     parser.add_argument("--vnn_ckpt", type=str, default="vnn.pt")
     parser.add_argument("--vit_ckpt", type=str, default="vit.pt")
-    parser.add_argument("--num_samples", type=int, default=20)
+    parser.add_argument("--num_samples", type=int, default=100, help="Number of stratified test samples to evaluate")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for deterministic stratified sampling")
+    parser.add_argument("--log_file", type=str, default="xai_evaluation.log", help="Path to output log file")
     args = parser.parse_args()
 
     run_comprehensive_xai_suite(
@@ -313,4 +355,7 @@ if __name__ == "__main__":
         vnn_ckpt=args.vnn_ckpt,
         vit_ckpt=args.vit_ckpt,
         num_samples=args.num_samples,
+        random_seed=args.seed,
+        log_file=args.log_file,
     )
+

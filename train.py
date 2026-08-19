@@ -110,6 +110,61 @@ def get_dataloaders(batch_size: int = 128, data_dir: str = "./data",
     return train_loader, test_loader, num_classes, in_channels
 
 
+def get_stratified_sample_indices(dataset: Dataset, num_samples: int = 100,
+                                   random_seed: int = 42) -> List[int]:
+    """
+    Extracts stratified sample indices from a dataset (e.g., DermaMNIST test set)
+    ensuring all 7 skin lesion classes are represented with balanced/proportional coverage.
+    Guarantees reproducible, identical index lists across all model architectures.
+    """
+    if hasattr(dataset, "labels") and dataset.labels is not None:
+        all_labels = np.asarray(dataset.labels).squeeze()
+    else:
+        all_labels = np.array([int(np.asarray(dataset[i][1]).squeeze()) for i in range(len(dataset))])
+
+    unique_classes = np.unique(all_labels)
+    total_len = len(all_labels)
+    target_samples = min(num_samples, total_len)
+
+    rng = np.random.RandomState(random_seed)
+    class_to_indices = {c: np.where(all_labels == c)[0] for c in unique_classes}
+    for c in unique_classes:
+        rng.shuffle(class_to_indices[c])
+
+    # Allocate counts proportionally, ensuring at least 1 sample per class
+    counts = {}
+    remaining = target_samples
+    for c in unique_classes:
+        prop = len(class_to_indices[c]) / total_len
+        cnt = max(1, int(round(prop * target_samples)))
+        cnt = min(cnt, len(class_to_indices[c]))
+        counts[c] = cnt
+        remaining -= cnt
+
+    # Adjust rounding differences
+    sorted_classes = sorted(unique_classes, key=lambda c: len(class_to_indices[c]), reverse=True)
+    idx = 0
+    while remaining > 0:
+        c = sorted_classes[idx % len(sorted_classes)]
+        if counts[c] < len(class_to_indices[c]):
+            counts[c] += 1
+            remaining -= 1
+        idx += 1
+    while remaining < 0:
+        c = sorted_classes[idx % len(sorted_classes)]
+        if counts[c] > 1:
+            counts[c] -= 1
+            remaining += 1
+        idx += 1
+
+    selected_indices = []
+    for c in unique_classes:
+        selected_indices.extend(class_to_indices[c][:counts[c]])
+
+    rng.shuffle(selected_indices)
+    return selected_indices[:target_samples]
+
+
 # ---------------------------------------------------------------------------
 # 2. Medical Classification Metrics (Precision, Recall/Sensitivity, F1, PR-AUC)
 # ---------------------------------------------------------------------------

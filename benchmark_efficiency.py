@@ -92,6 +92,9 @@ def measure_latency_and_throughput(model: nn.Module, device: torch.device,
     }
 
 
+from logger_utils import setup_logger
+
+
 def benchmark_model_efficiency(name: str, num_classes: int = 7,
                                in_channels: int = 3, img_size: int = 32,
                                device: torch.device = None) -> Dict[str, Any]:
@@ -124,36 +127,40 @@ def benchmark_model_efficiency(name: str, num_classes: int = 7,
     }
 
 
-def run_efficiency_suite(num_classes: int = 7, in_channels: int = 3, img_size: int = 32) -> None:
+def run_efficiency_suite(num_classes: int = 7, in_channels: int = 3, img_size: int = 32,
+                         log_file: str = "benchmark_efficiency.log") -> None:
     """
-    Runs efficiency benchmarking across CNN, VNN, and ViT architectures on DermaMNIST.
+    Runs efficiency benchmarking across CNN, VNN, and ViT architectures on DermaMNIST and logs to disk.
     """
+    logger = setup_logger("BenchmarkEfficiency", log_file)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("\n" + "=" * 80)
-    print(f"COMPUTATIONAL EFFICIENCY & HARDWARE COMPLEXITY PROFILING ({device})")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info(f"COMPUTATIONAL EFFICIENCY & HARDWARE COMPLEXITY PROFILING ({device})")
+    logger.info("=" * 80)
 
     results = []
     for m_type in ["cnn", "vnn", "vit"]:
         res = benchmark_model_efficiency(m_type, num_classes=num_classes, in_channels=in_channels,
                                          img_size=img_size, device=device)
         results.append(res)
+        logger.info(f"Profiled {m_type.upper()}: {res['params']:,} params, {res['latency_ms']:.2f} ms/img, {res['throughput_fps']:.1f} fps")
 
-    print("\n" + "=" * 80)
-    print("COMPUTATIONAL COMPLEXITY TABLE (GFM Format)")
-    print("=" * 80)
-    print("| Model | Parameters | Checkpoint Size | Est. MACs (M) | Latency (ms/img) | Throughput (img/s) |")
-    print("| :--- | :--- | :--- | :--- | :--- | :--- |")
+    logger.info("\n" + "=" * 80)
+    logger.info("COMPUTATIONAL COMPLEXITY TABLE (GFM Format)")
+    logger.info("=" * 80)
+    logger.info("| Model | Parameters | Checkpoint Size | Est. MACs (M) | Latency (ms/img) | Throughput (img/s) |")
+    logger.info("| :--- | :--- | :--- | :--- | :--- | :--- |")
     for r in results:
         macs_m = r['macs'] / 1e6
-        print(f"| **{r['model']}** | {r['params']:,d} | {r['file_size_mb']:.2f} MB | {macs_m:.2f}M | {r['latency_ms']:.2f} ms | {r['throughput_fps']:.1f} fps |")
-    print("=" * 80 + "\n")
+        logger.info(f"| **{r['model']}** | {r['params']:,d} | {r['file_size_mb']:.2f} MB | {macs_m:.2f}M | {r['latency_ms']:.2f} ms | {r['throughput_fps']:.1f} fps |")
+    logger.info("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Profile Model Efficiency on DermaMNIST")
     parser.add_argument("--num_classes", type=int, default=7)
     parser.add_argument("--img_size", type=int, default=32)
+    parser.add_argument("--log_file", type=str, default="benchmark_efficiency.log")
     args = parser.parse_args()
 
-    run_efficiency_suite(num_classes=args.num_classes, img_size=args.img_size)
+    run_efficiency_suite(num_classes=args.num_classes, img_size=args.img_size, log_file=args.log_file)
