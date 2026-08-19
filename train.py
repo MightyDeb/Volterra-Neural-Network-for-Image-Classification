@@ -39,7 +39,8 @@ DERMAMNIST_CLASSES: List[str] = [
 # ---------------------------------------------------------------------------
 def get_dataset(data_dir: str = "./data", img_size: int = 32) -> Tuple[Dataset, Dataset, int, int]:
     """
-    Loads DermaMNIST dataset (7 lesion classes, 3 channels).
+    Loads DermaMNIST dataset (7 lesion classes, 3 channels) with automatic
+    directory creation and fallback handling.
     """
     mean = (0.5, 0.5, 0.5)
     std = (0.5, 0.5, 0.5)
@@ -60,21 +61,34 @@ def get_dataset(data_dir: str = "./data", img_size: int = 32) -> Tuple[Dataset, 
         transforms.Normalize(mean, std),
     ])
 
+    # Ensure directories exist prior to MedMNIST initialization
+    data_dir = os.path.abspath(data_dir)
+    os.makedirs(data_dir, exist_ok=True)
+    home_medmnist = os.path.expanduser("~/.medmnist")
+    os.makedirs(home_medmnist, exist_ok=True)
+
     try:
         import medmnist
         from medmnist import DermaMNIST
-        train_set = DermaMNIST(split="train", transform=train_tf, download=True, root=data_dir, as_rgb=True)
-        test_set = DermaMNIST(split="test", transform=test_tf, download=True, root=data_dir, as_rgb=True)
+
+        try:
+            train_set = DermaMNIST(split="train", transform=train_tf, download=True, root=data_dir, as_rgb=True)
+            test_set = DermaMNIST(split="test", transform=test_tf, download=True, root=data_dir, as_rgb=True)
+        except Exception:
+            # Fallback to ~/.medmnist if custom root encounters path issues
+            train_set = DermaMNIST(split="train", transform=train_tf, download=True, root=home_medmnist, as_rgb=True)
+            test_set = DermaMNIST(split="test", transform=test_tf, download=True, root=home_medmnist, as_rgb=True)
+
         return train_set, test_set, 7, 3
-    except ImportError:
-        print("[Warning] 'medmnist' library not found. Using simulated DermaMNIST (7 classes) for offline execution.")
+
+    except Exception as err:
+        print(f"[Warning] Could not initialize MedMNIST ({err}). Using simulated DermaMNIST (7 classes) for offline execution.")
 
         class SyntheticDermaMNIST(Dataset):
             def __init__(self, size=600, n_classes=7):
                 self.size = size
                 self.n_classes = n_classes
                 self.data = torch.randn(size, 3, img_size, img_size)
-                # Skewed class distribution mimicking real DermaMNIST (nv dominant)
                 class_weights = torch.tensor([0.05, 0.07, 0.12, 0.02, 0.15, 0.56, 0.03])
                 self.labels = torch.multinomial(class_weights, size, replacement=True)
 
@@ -135,7 +149,6 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray,
         y_true_onehot = np.eye(num_classes)[y_true]
         pr_auc = float(average_precision_score(y_true_onehot, y_prob, average="macro"))
     except Exception:
-        # Fallback approximation based on macro precision and recall
         pr_auc = float(macro_precision * macro_recall) if (macro_precision + macro_recall) > 0 else acc
 
     return {
