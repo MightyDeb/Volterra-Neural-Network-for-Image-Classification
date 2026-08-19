@@ -1,2 +1,8 @@
-torch>=2.0
-torchvision>=0.15
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.22.0
+matplotlib>=3.5.0
+scikit-learn>=1.0.0
+scipy>=1.8.0
+medmnist>=3.0.0
+pandas>=1.5.0

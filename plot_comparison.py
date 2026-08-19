@@ -1,87 +1,143 @@
 """
-Produces a single side-by-side figure: original image, CNN Grad-CAM,
-ViT attention rollout, VNN pairwise interaction map.
-
-Usage (after training all three models with train.py and saving checkpoints):
-    python plot_comparison.py --cnn_ckpt cnn.pt --vit_ckpt vit.pt --vnn_ckpt vnn.pt
-
-If no checkpoints are given, runs with randomly initialized weights just to
-verify the figure layout (NOT meaningful results -- for real results, save
-model.state_dict() at the end of train.py and load them here).
+Qualitative Multi-Model Explainability Comparison Visualizer:
+Produces a 4-panel side-by-side figure:
+  1. Original Medical / Natural Image with Prediction & Confidence
+  2. CNN : Grad-CAM Class Activation Saliency Map Overlay
+  3. ViT : Attention Rollout Spatial Influence Map Overlay
+  4. VNN : Volterra Pairwise Quadratic Interaction Map Overlay
 """
 
 import argparse
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torchvision
-import torchvision.transforms as transforms
 
-from models import SimpleCNN, SimpleViT, SimpleVNN
-from viz import gradcam_cnn, attention_rollout_vit, volterra_pairwise_map
+from models import build_model
+from viz import generate_saliency_map
+from train import get_dataset
 
 
-def denormalize(img_tensor, mean, std):
-    img = img_tensor.clone().squeeze(0)
-    for c in range(3):
+def denormalize_image(img_tensor: torch.Tensor, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)) -> np.ndarray:
+    """Denormalizes PyTorch image tensor (1, C, H, W) to [0, 1] RGB numpy array (H, W, C)."""
+    img = img_tensor.clone().detach().cpu().squeeze(0)
+    for c in range(min(3, img.shape[0])):
         img[c] = img[c] * std[c] + mean[c]
-    return img.permute(1, 2, 0).clamp(0, 1).numpy()
+    np_img = img.permute(1, 2, 0).clamp(0, 1).numpy()
+    return np_img
 
 
-def main(cnn_ckpt=None, vit_ckpt=None, vnn_ckpt=None, image_index=0):
-    mean = (0.4914, 0.4822, 0.4465)
-    std = (0.2470, 0.2435, 0.2616)
+def generate_comparison_plot(cnn_ckpt: str = "cnn.pt", vit_ckpt: str = "vit.pt",
+                             vnn_ckpt: str = "vnn.pt", dataset_name: str = "cifar10",
+                             image_index: int = 0, output_path: str = "interpretability_comparison.png") -> None:
+    """
+    Generates and saves the 4-panel interpretability figure comparing CNN, ViT, and VNN.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_set, test_set, num_classes, in_channels = get_dataset(dataset_name, img_size=32)
 
-    tf = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean, std)])
-    test_set = torchvision.datasets.CIFAR10(root="./data", train=False, download=True, transform=tf)
-    img, label = test_set[image_index]
-    img = img.unsqueeze(0)
+    if image_index >= len(test_set):
+        print(f"[Warning] Index {image_index} exceeds dataset size ({len(test_set)}). Using index 0.")
+        image_index = 0
 
-    cnn = SimpleCNN()
-    vit = SimpleViT()
-    vnn = SimpleVNN()
-    if cnn_ckpt:
-        cnn.load_state_dict(torch.load(cnn_ckpt, map_location="cpu"))
-    if vit_ckpt:
-        vit.load_state_dict(torch.load(vit_ckpt, map_location="cpu"))
-    if vnn_ckpt:
-        vnn.load_state_dict(torch.load(vnn_ckpt, map_location="cpu"))
+    img_tensor, true_label = test_set[image_index]
+    if isinstance(img_tensor, np.ndarray):
+        img_tensor = torch.tensor(img_tensor)
+    if img_tensor.ndim == 3:
+        img_tensor = img_tensor.unsqueeze(0)
+    img_tensor = img_tensor.to(device)
 
-    cam = gradcam_cnn(cnn, img)
-    rollout = attention_rollout_vit(vit, img)
-    vmap = volterra_pairwise_map(vnn.features[0], img)
+    if isinstance(true_label, torch.Tensor):
+        true_label = int(true_label.item())
 
-    orig = denormalize(img, mean, std)
+    # Build models
+    cnn = build_model("cnn", num_classes=num_classes, in_channels=in_channels, img_size=32).to(device)
+    vit = build_model("vit", num_classes=num_classes, in_channels=in_channels, img_size=32).to(device)
+    vnn = build_model("vnn", num_classes=num_classes, in_channels=in_channels, img_size=32).to(device)
 
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-    axes[0].imshow(orig)
-    axes[0].set_title(f"Original (label={label})")
+    # Load weights if available
+    for m, ckpt in [(cnn, cnn_ckpt), (vit, vit_ckpt), (vnn, vnn_ckpt)]:
+        if ckpt and os.path.exists(ckpt):
+            m.load_state_dict(torch.load(ckpt, map_location=device))
+        else:
+            print(f"[Notice] Checkpoint '{ckpt}' not found. Using initialized weights for visualization.")
 
-    axes[1].imshow(orig)
-    axes[1].imshow(cam, cmap="jet", alpha=0.5)
-    axes[1].set_title("CNN: Grad-CAM")
+    cnn.eval()
+    vit.eval()
+    vnn.eval()
 
-    axes[2].imshow(rollout, cmap="viridis")
-    axes[2].set_title("ViT: Attention Rollout\n(8x8 patch grid)")
+    # Get predictions and probabilities
+    with torch.no_grad():
+        out_cnn = torch.softmax(cnn(img_tensor), dim=1)[0]
+        out_vit = torch.softmax(vit(img_tensor), dim=1)[0]
+        out_vnn = torch.softmax(vnn(img_tensor), dim=1)[0]
 
-    axes[3].imshow(orig)
-    axes[3].imshow(vmap, cmap="jet", alpha=0.5)
-    axes[3].set_title("VNN: Pairwise Interaction Map\n(2nd-order Volterra term)")
+    pred_cnn, conf_cnn = out_cnn.argmax().item(), out_cnn.max().item()
+    pred_vit, conf_vit = out_vit.argmax().item(), out_vit.max().item()
+    pred_vnn, conf_vnn = out_vnn.argmax().item(), out_vnn.max().item()
+
+    # Generate Saliency Maps
+    cam = generate_saliency_map(cnn, "cnn", img_tensor, target_class=pred_cnn)
+    rollout = generate_saliency_map(vit, "vit", img_tensor)
+    vmap = generate_saliency_map(vnn, "vnn", img_tensor)
+
+    # Denormalize image for display
+    if dataset_name == "cifar10":
+        orig_img = denormalize_image(img_tensor, mean=(0.4914, 0.4822, 0.4465), std=(0.2470, 0.2435, 0.2616))
+    else:
+        orig_img = denormalize_image(img_tensor, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+
+    # Plot Figure
+    fig, axes = plt.subplots(1, 4, figsize=(18, 4.5))
+
+    # Panel 1: Original Image
+    axes[0].imshow(orig_img)
+    axes[0].set_title(f"Original Sample\n(True Class: {true_label})", fontsize=12, fontweight="bold")
+
+    # Panel 2: CNN Grad-CAM
+    axes[1].imshow(orig_img)
+    im1 = axes[1].imshow(cam, cmap="jet", alpha=0.5)
+    axes[1].set_title(f"CNN: Grad-CAM\nPred: {pred_cnn} ({conf_cnn*100:.1f}%)", fontsize=12, fontweight="bold")
+    plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
+
+    # Panel 3: ViT Attention Rollout
+    axes[2].imshow(orig_img)
+    im2 = axes[2].imshow(rollout, cmap="viridis", alpha=0.55)
+    axes[2].set_title(f"ViT: Attention Rollout\nPred: {pred_vit} ({conf_vit*100:.1f}%)", fontsize=12, fontweight="bold")
+    plt.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
+
+    # Panel 4: VNN Pairwise Interaction Map
+    axes[3].imshow(orig_img)
+    im3 = axes[3].imshow(vmap, cmap="inferno", alpha=0.55)
+    axes[3].set_title(f"VNN: 2nd-Order Volterra Map\nPred: {pred_vnn} ({conf_vnn*100:.1f}%)", fontsize=12, fontweight="bold")
+    plt.colorbar(im3, ax=axes[3], fraction=0.046, pad=0.04)
 
     for ax in axes:
         ax.axis("off")
 
+    plt.suptitle(f"XAI Multi-Architecture Comparison | Dataset: {dataset_name.upper()} | Sample #{image_index}",
+                 fontsize=14, fontweight="bold", y=1.03)
     plt.tight_layout()
-    plt.savefig("interpretability_comparison.png", dpi=150)
-    print("Saved interpretability_comparison.png")
+    plt.savefig(output_path, dpi=200, bbox_inches="tight")
+    print(f"Saved qualitative comparison figure to: {output_path}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cnn_ckpt", type=str, default=None)
-    parser.add_argument("--vit_ckpt", type=str, default=None)
-    parser.add_argument("--vnn_ckpt", type=str, default=None)
+    parser = argparse.ArgumentParser(description="Generate 4-Panel Qualitative Explainability Comparison")
+    parser.add_argument("--cnn_ckpt", type=str, default="cnn.pt")
+    parser.add_argument("--vit_ckpt", type=str, default="vit.pt")
+    parser.add_argument("--vnn_ckpt", type=str, default="vnn.pt")
+    parser.add_argument("--dataset", type=str, default="cifar10")
     parser.add_argument("--image_index", type=int, default=0)
+    parser.add_argument("--out", type=str, default="interpretability_comparison.png")
     args = parser.parse_args()
-    main(args.cnn_ckpt, args.vit_ckpt, args.vnn_ckpt, args.image_index)
+
+    generate_comparison_plot(
+        cnn_ckpt=args.cnn_ckpt,
+        vit_ckpt=args.vit_ckpt,
+        vnn_ckpt=args.vnn_ckpt,
+        dataset_name=args.dataset,
+        image_index=args.image_index,
+        output_path=args.out,
+    )

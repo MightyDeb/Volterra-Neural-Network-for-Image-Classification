@@ -1,107 +1,81 @@
-# VNN vs CNN vs ViT — CIFAR-10 Comparison
+# Volterra Neural Network for Image Classification & Explainable AI (XAI)
 
-A minimal, honest comparison of a Volterra Neural Network against a standard
-CNN and a small ViT, matched roughly (not exactly) on scale.
+[![GitHub](https://img.shields.io/badge/GitHub-MightyDeb-blue.svg)](https://github.com/MightyDeb/Volterra-Neural-Network-for-Image-Classification)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg?logo=pytorch)](https://pytorch.org)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg?logo=python)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Files
-- `models.py` — all three model definitions + a sanity-check script
-- `train.py` — trains one model on CIFAR-10, logs results to `results.csv`
-- `results.csv` — created automatically after your first run
+A rigorous comparative evaluation framework contrasting **Volterra Neural Networks (VNN)**, **Convolutional Neural Networks (CNN)**, and **Vision Transformers (ViT)** across medical benchmarks (DermaMNIST, PathMNIST) and natural images (CIFAR-10), extended with **quantitative Explainable AI (XAI)** metrics, **deep representation analysis (CKA, t-SNE, Silhouette)**, and **computational efficiency profiling**.
 
-## Quickstart (Google Colab, GPU runtime)
+---
 
-1. Upload `models.py` and `train.py` to Colab (or `git clone` if you push
-   this to a repo).
-2. Set runtime to GPU: Runtime -> Change runtime type -> T4 GPU
-3. Run:
+## 📁 Repository Structure
 
+| File | Description |
+| :--- | :--- |
+| [`models.py`](file:///models.py) | Full model definitions (`SimpleCNN`, `SimpleVNN`, `SimpleViT`, `VolterraConv2d`) with feature extractors & intermediate activation hooks |
+| [`train.py`](file:///train.py) | Training & validation pipeline with medical metrics (Macro Recall/Sensitivity, Precision, F1, ROC-AUC, PR-AUC) and checkpointing |
+| [`viz.py`](file:///viz.py) | XAI visualization engine for CNN (Grad-CAM), ViT (Attention Rollout), and VNN (Volterra 2nd-order Pairwise Map) |
+| [`plot_comparison.py`](file:///plot_comparison.py) | Generates side-by-side 4-panel interpretability comparison figures (`interpretability_comparison.png`) |
+| [`evaluate_xai.py`](file:///evaluate_xai.py) | Quantitative XAI benchmark suite: Deletion AUC, Insertion AUC, and Perturbation Stability (SSIM, Pearson, IoU) |
+| [`analyze_representations.py`](file:///analyze_representations.py) | Latent space analysis: CKA similarity matrix, t-SNE clustering, Silhouette scores, and Volterra branch energy ratios |
+| [`benchmark_efficiency.py`](file:///benchmark_efficiency.py) | Computational complexity profiler: Parameters, FLOPs/MACs, inference latency (ms), throughput (FPS), and memory |
+| [`results.csv`](file:///results.csv) | Experiment log tracking parameters, training time, accuracy, and clinical metrics |
+| [`README_XAI_Medical_VNN_CNN_ViT.md`](file:///README_XAI_Medical_VNN_CNN_ViT.md) | Full publication-grade research specification & mathematical formulations |
+
+---
+
+## 🚀 Quickstart
+
+### 1. Installation
 ```bash
-!pip install torch torchvision --quiet
-!python train.py --model cnn --epochs 20
-!python train.py --model vnn --epochs 20
-!python train.py --model vit --epochs 20
+pip install -r requirements.txt
 ```
 
-Each run appends a row to `results.csv` with model name, parameter count,
-final test accuracy, and training time. After all three runs, open
-`results.csv` and plot accuracy vs. params — that's your headline result.
-
-CIFAR-10 downloads automatically via torchvision on first run (~170MB).
-
-## What's already verified
-- All three models forward-pass and backward-pass correctly (checked with
-  synthetic data on CPU in this environment — no GPU/internet was available
-  here to run real CIFAR-10 training, so **you must run the actual training
-  yourself on Colab/Kaggle**).
-- Current parameter counts: CNN ~95K, VNN ~281K (rank=1), ViT ~546K.
-  These are NOT exactly matched — that's normal and fine. Report the actual
-  numbers and discuss accuracy-per-parameter rather than pretending they're
-  equal. If you want VNN closer to the CNN's ~95K, reduce channel widths in
-  `SimpleVNN.__init__` (currently 32→64→128) rather than fighting with rank.
-
-## Interpretability (viz.py + plot_comparison.py)
-
-This is the genuinely novel part of the project, so it's included:
-
-- **CNN**: Grad-CAM — highlights which pixels drove the prediction.
-- **ViT**: Attention rollout — shows which patches the [CLS] token attended
-  to, aggregated across all transformer layers.
-- **VNN**: Pairwise Volterra interaction map — visualizes where the
-  *quadratic* term (the `a_q(x) * b_q(x)` product in `VolterraConv2d`) is
-  strongest. This is the part a CNN or ViT explanation cannot show directly:
-  single-pixel saliency and patch attention are first-order explanations,
-  while this map reflects a genuine pairwise interaction, which is the
-  actual selling point of doing interpretability on a VNN specifically.
-
-### Usage
-After training and saving checkpoints (train.py now saves `{model}.pt`
-automatically at the end of each run):
-
+### 2. Model Training
+Train CNN, VNN, and ViT models on DermaMNIST or CIFAR-10:
 ```bash
-python plot_comparison.py --cnn_ckpt cnn.pt --vit_ckpt vit.pt --vnn_ckpt vnn.pt
+# Medical Dataset (DermaMNIST - 7 classes)
+python train.py --dataset dermamnist --model cnn --epochs 20
+python train.py --model vnn --dataset dermamnist --epochs 20
+python train.py --model vit --dataset dermamnist --epochs 20
+
+# Natural Dataset (CIFAR-10 - 10 classes)
+python train.py --dataset cifar10 --model cnn --epochs 20
+python train.py --model vnn --dataset cifar10 --epochs 20
+python train.py --model vit --dataset cifar10 --epochs 20
 ```
 
-This saves `interpretability_comparison.png` — a 4-panel figure: original
-image, Grad-CAM, attention rollout, Volterra pairwise map. Run it on a
-handful of test images (change `--image_index`) and pick 2-3 representative
-examples for your write-up — don't try to systematically evaluate this
-quantitatively (deletion/insertion metrics, IoU against ground truth) this
-month, that's real additional work for later.
+### 3. Qualitative XAI Visualization
+Generate a side-by-side 4-panel comparison figure (`interpretability_comparison.png`):
+```bash
+python plot_comparison.py --cnn_ckpt cnn.pt --vit_ckpt vit.pt --vnn_ckpt vnn.pt --dataset dermamnist --image_index 0
+```
 
-**Verified**: all three visualization functions (`gradcam_cnn`,
-`attention_rollout_vit`, `volterra_pairwise_map`) were run end-to-end here
-with real PyTorch on synthetic data and confirmed to produce correctly
-shaped outputs without errors. `plot_comparison.py`'s figure assembly was
-also verified. What was NOT verified here (no GPU/internet in this sandbox):
-whether the visualizations look *meaningful* once the models are actually
-trained on real CIFAR-10 — that only becomes visible once you've trained
-real weights on Colab. Untrained/random-weight Grad-CAM and attention maps
-are meaningless noise by definition; don't be alarmed if the sanity-check
-images look like nothing.
+### 4. Quantitative XAI Benchmarking
+Evaluate Deletion AUC, Insertion AUC, and Explanation Stability (SSIM, IoU):
+```bash
+python evaluate_xai.py --cnn_ckpt cnn.pt --vnn_ckpt vnn.pt --vit_ckpt vit.pt --dataset dermamnist --num_samples 30
+```
 
-## What this project deliberately does NOT include (yet)
-- **Quantitative interpretability metrics** (deletion/insertion curves,
-  localization IoU against bounding boxes, human evaluation) — the
-  qualitative visualizations above are the scoped deliverable for this
-  month; quantitative evaluation is real additional work, save it for later
-  if you continue this after placements.
-- CIFAR-100 / ImageNet — start with CIFAR-10 for speed; scale up later only
-  if you have time and compute.
-- Hyperparameter tuning — the defaults (AdamW, lr=1e-3, cosine schedule,
-  20 epochs) are reasonable starting points, not tuned. Don't burn your
-  week tuning hyperparameters; get one clean run per model first.
+### 5. Deep Representation & CKA Analysis
+Compute cross-model CKA similarity, Silhouette scores, and t-SNE latent embeddings:
+```bash
+python analyze_representations.py --cnn_ckpt cnn.pt --vnn_ckpt vnn.pt --vit_ckpt vit.pt --dataset dermamnist
+```
 
-## Suggested minimal timeline
-- Day 1: Get training running on Colab, confirm CIFAR-10 downloads, run cnn
-  for 5 epochs just to confirm the pipeline works end-to-end.
-- Day 2-4: Run all three models for the full 20 epochs (can run overnight /
-  between placement prep sessions — each run is unattended once started;
-  checkpoints save automatically).
-- Day 5: Run `plot_comparison.py` on 2-3 test images, pick the clearest
-  example, write 3-4 sentences on what you observed (e.g. does the Volterra
-  map highlight edges/textures differently from Grad-CAM's blob-like focus?).
+### 6. Computational Efficiency Profiling
+Measure parameters, FLOPs/MACs, latency, and throughput:
+```bash
+python benchmark_efficiency.py
+```
 
-That's a complete, honest, small project with a genuinely distinctive piece
-(the pairwise interaction map). Don't scope-creep further this month —
-quantitative evaluation and multi-dataset results are legitimate next steps
-for after placements, not now.
+---
+
+## 🔬 Model Comparison Overview
+
+- **CNN**: Standard baseline with $3 \times 3$ convolutional filters, BatchNorm, and ReLU activation. Explainability via **Grad-CAM**.
+- **VNN**: Second-order polynomial filter with Rank-$R$ branch factorization:
+  $$y = (W_{\text{lin}} * x) + \sum_{q=1}^R \Big((A_q * x) \odot (B_q * x)\Big)$$
+  Activation-free representation. Explainability via **Pairwise Volterra Interaction Maps**.
+- **ViT**: Vision Transformer with patch projection and multi-head self-attention. Explainability via **Attention Rollout**.
